@@ -200,8 +200,14 @@ Client 半边需要真实浏览器 + 运行中的 Harness 才能验证；仓库 
 
 DSH 插件生态很大，可以从
 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 开始浏览。
-其他 DSH + Obsidian 插件偏向库内记忆、笔记写作、草稿生成；本插件刻意保持窄：它不索引、
-不读取、不写入你的库，只把一次点击交给 Obsidian，剩下的交给 Obsidian 自己。
+有几条和本插件挨得比较近，值得说明区别：
+
+- [`dsh-open-native`](https://github.com/Lessthinker66/dsh-open-native) —— **交互上最像**：点交付文件卡片时用系统默认程序打开，Shift/Ctrl/Alt/Cmd 保留内置预览。它在 DOM 捕获阶段只拦 `[data-presented-file]` 这一种卡片，然后调 `session.openWorkspacePath`；本插件包装的是 Harness 的导航控制器 `ctx.sidebarRight.openResource`，因此**所有文件打开入口都覆盖**——对话里的 Markdown 链接、工具行路径、行内提及、`@file` 引用、文件树——并且走 `obsidian://` 而不是系统文件关联。
+- [`dsh-open-with`](https://github.com/HildebrandYu/dsh-open-with) —— 按后缀配置「用哪个 app 打开」，规则存在 `~/.dsh/open-with.json`，作用于交付卡片、侧边预览和变更审查。配置文件和「指定 app」的思路相同，但它不认库：打开的是原始文件，而不是通过 `obsidian://` 打开笔记。
+- [`NOOBnoob163/dsh-open-obsidian`](https://github.com/NOOBnoob163/dsh-open-obsidian) —— 第一条真人消息时自动打开整个库（仅 Windows，为的是让同步插件跑起来），并带按库写锁。触发点和目的都不同；本插件只打开被点击的那一篇笔记，从不写库。
+- [`dsh-wsl-obsidian`](https://github.com/173787247/dsh-wsl-obsidian) —— WSL/Windows 下的库访问（读写工具 + `obsidian://` 打开），面向 Agent 读写笔记，而不是 Web GUI 里点击文件的行为。
+
+本插件刻意保持窄：它不索引、不读取、不写入你的库，只把一次点击交给 Obsidian，剩下的交给 Obsidian 自己。
 
 ## 许可证
 

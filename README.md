@@ -223,9 +223,28 @@ covers the host helpers only.
 
 The DSH plugin ecosystem is large: start from
 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin).
-Other DSH + Obsidian plugins cover vault memory, note authoring, and draft writing; this plugin is
-deliberately narrow — it never indexes, reads, or writes the vault. It only hands a click over to the
-Obsidian app and lets Obsidian do the rest.
+A few entries live near this one, and it is worth saying how they differ:
+
+- [`dsh-open-native`](https://github.com/Lessthinker66/dsh-open-native) — the closest neighbour in
+  *interaction*: clicking a delivered-file card opens it with the OS default app, and Shift/Ctrl/Alt/Cmd
+  keeps the preview. It intercepts that one card (`[data-presented-file]`) in a capture-phase DOM click
+  listener and calls `session.openWorkspacePath`. This plugin instead wraps the Harness navigation
+  controller (`ctx.sidebarRight.openResource`), so every file-open path is covered — conversation
+  Markdown links, tool-row paths, inline mentions, `@file` references, the file tree — and it targets the
+  Obsidian URI scheme rather than the OS association.
+- [`dsh-open-with`](https://github.com/HildebrandYu/dsh-open-with) — a per-extension “open with” map in
+  `~/.dsh/open-with.json` for delivery cards, the sidebar preview and change review. Same config-file
+  idea, more apps, no vault awareness: it opens the raw file, not the note through `obsidian://`.
+- [`NOOBnoob163/dsh-open-obsidian`](https://github.com/NOOBnoob163/dsh-open-obsidian) — auto-opens the
+  whole vault on the first human message (Windows only) so sync plugins start running, and adds a
+  per-vault write lock. Different trigger and purpose; this plugin opens only the clicked note and never
+  writes to the vault.
+- [`dsh-wsl-obsidian`](https://github.com/173787247/dsh-wsl-obsidian) — WSL/Windows vault access for the
+  agent (tools plus `obsidian://` open), aimed at reading and writing notes rather than at how a click in
+  the Web GUI opens a file.
+
+This plugin stays deliberately narrow: it never indexes, reads, or writes the vault. It only hands a
+click over to the Obsidian app and lets Obsidian do the rest.
 
 ## License
 
