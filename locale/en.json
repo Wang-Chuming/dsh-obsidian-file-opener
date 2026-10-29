@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Obsidian Bridge",
+    "description": "One-click channel from the conversation to the Obsidian vault: file references and file opens of vault notes launch in the Obsidian app instead of the in-app preview. Cmd/Ctrl-click keeps the in-app preview."
+  }
+}

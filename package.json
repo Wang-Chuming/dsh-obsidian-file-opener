@@ -1,0 +1,59 @@
+{
+  "name": "@dsh-external/dsh-obsidian-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One-click Obsidian channel for DeepSeek Harness: opening a vault file from the Web conversation (or from a model tool) launches the Obsidian app instead of the in-app preview.",
+  "license": "MIT",
+  "author": "Wang-Chuming",
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "obsidian",
+    "obsidian-vault",
+    "web-gui",
+    "plugin"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wang-Chuming/dsh-obsidian-bridge.git"
+  },
+  "homepage": "https://github.com/Wang-Chuming/dsh-obsidian-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/Wang-Chuming/dsh-obsidian-bridge/issues"
+  },
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.example.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check index.js && node --check client.js && node --check test/host.test.mjs",
+    "test": "node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

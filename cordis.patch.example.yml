@@ -1,0 +1,30 @@
+# dsh-obsidian-bridge bundle layer:
+# one Host row owning the authenticated Obsidian routes and the `open_in_obsidian`
+# model tool, plus its Client half that redirects vault file opens to the Obsidian app.
+#
+# HOW TO USE
+#   1. cp cordis.patch.example.yml cordis.patch.yml
+#   2. fill in `vaultRoot` (required) and `vaultName` (optional)
+#
+# `cordis.patch.yml` is gitignored on purpose: your personal vault path stays local,
+# and `git pull` never fights with your machine-specific configuration.
+# With an empty `vaultRoot` the plugin loads but stays inert: the config route answers
+# `ok: false` and the client keeps the shipped in-app preview for every file.
+- insert:
+    - id: obsidian-bridge
+      name: '@dsh-external/dsh-obsidian-bridge'
+      config:
+        # REQUIRED — absolute path of the Obsidian vault to bridge to.
+        vaultRoot: ''
+        # Optional — the vault name as Obsidian shows it. When empty, the bridge uses
+        # `obsidian://open?path=<absolute path>` instead of `?vault=…&file=…`.
+        vaultName: ''
+        # Which vault files are taken away from the in-app preview.
+        # An empty list means "every file in the vault".
+        extensions:
+          - .md
+          - .canvas
+          - .base
+        # First-load self-test target, relative to the vault root (set selftest: false to skip).
+        testPath: HOME.md
+        selftest: true
