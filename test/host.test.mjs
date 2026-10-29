@@ -1,15 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
 	normalizeConfig,
+	buildConfig,
+	readConfigFile,
 	resolveVaultFile,
 	obsidianUri,
 	openerFor
 } from "../index.js";
+
+const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Build a throwaway vault: <root>/note.md, <root>/sub/deep.md, plus an outside file. */
 function makeVault() {
@@ -24,37 +29,91 @@ function makeVault() {
 	return { base, vaultRoot, outside };
 }
 
+/** Hermetic config: `{}` keeps the suite from reading the machine's real config file. */
 function configFor(vaultRoot, extra = {}) {
-	return normalizeConfig({ vaultRoot, vaultName: "MyVault", ...extra });
+	return normalizeConfig({ vaultRoot, vaultName: "MyVault", ...extra }, {});
 }
 
 test("normalizeConfig fills defaults and resolves the vault root", () => {
 	const { vaultRoot } = makeVault();
-	const config = normalizeConfig({ vaultRoot });
+	const config = normalizeConfig({ vaultRoot }, {});
 	assert.equal(config.vaultRoot, path.resolve(vaultRoot));
 	assert.deepEqual(config.extensions, [".md"]);
 	assert.equal(config.vaultName, "");
 	assert.equal(config.testPath, "HOME.md");
 	assert.equal(config.selftest, true);
 	assert.ok(config.diagFile.endsWith(path.join(".dsh", "obsidian-bridge.diag.jsonl")));
+	assert.ok(config.configFile.endsWith(path.join(".dsh", "obsidian-bridge.config.json")));
 });
 
 test("normalizeConfig lowercases extensions, accepts an empty list, and drops junk entries", () => {
 	const { vaultRoot } = makeVault();
-	assert.deepEqual(normalizeConfig({ vaultRoot, extensions: [".MD", "canvas"] }).extensions, [".md"]);
-	assert.deepEqual(normalizeConfig({ vaultRoot, extensions: [] }).extensions, []);
-	const config = normalizeConfig({ vaultRoot, extensions: [".Base", 42, null] });
+	assert.deepEqual(normalizeConfig({ vaultRoot, extensions: [".MD", "canvas"] }, {}).extensions, [".md"]);
+	assert.deepEqual(normalizeConfig({ vaultRoot, extensions: [] }, {}).extensions, []);
+	const config = normalizeConfig({ vaultRoot, extensions: [".Base", 42, null] }, {});
 	assert.deepEqual(config.extensions, [".base"]);
 });
 
 test("normalizeConfig tolerates malformed raw config", () => {
 	for (const raw of [undefined, null, [], "text", 7]) {
-		const config = normalizeConfig(raw);
+		const config = normalizeConfig(raw, {});
 		assert.equal(config.vaultRoot, "");
 		assert.equal(config.selftest, true);
 	}
-	assert.equal(normalizeConfig({ vaultRoot: "  " }).vaultRoot, "");
-	assert.equal(normalizeConfig({ vaultRoot: "/x", selftest: false }).selftest, false);
+	assert.equal(normalizeConfig({ vaultRoot: "  " }, {}).vaultRoot, "");
+	assert.equal(normalizeConfig({ vaultRoot: "/x", selftest: false }, {}).selftest, false);
+});
+
+test("buildConfig lets the bundle row override the config file", () => {
+	const file = { vaultRoot: "/from-file", vaultName: "FileVault", extensions: [], selftest: false };
+	const merged = buildConfig({ vaultRoot: "/from-row" }, file, "/tmp/c.json");
+	assert.equal(merged.vaultRoot, path.resolve("/from-row"));
+	assert.equal(merged.vaultName, "FileVault");
+	assert.deepEqual(merged.extensions, []);
+	assert.equal(merged.selftest, false);
+});
+
+test("buildConfig fills the row's gaps from the config file", () => {
+	const file = { vaultRoot: "~/notes", vaultName: "Notes", testPath: "Inbox.md", diagFile: "~/logs/bridge.jsonl" };
+	const merged = buildConfig({}, file, "/tmp/c.json");
+	assert.equal(merged.vaultRoot, path.join(homedir(), "notes"));
+	assert.equal(merged.vaultName, "Notes");
+	assert.equal(merged.testPath, "Inbox.md");
+	assert.equal(merged.diagFile, path.join(homedir(), "logs", "bridge.jsonl"));
+	assert.equal(merged.selftest, true);
+	assert.deepEqual(merged.extensions, [".md"]);
+});
+
+test("buildConfig ignores non-string and empty path values", () => {
+	const merged = buildConfig({ vaultRoot: 7, extensions: ".md" }, { vaultRoot: "", diagFile: 42 }, "/tmp/c.json");
+	assert.equal(merged.vaultRoot, "");
+	assert.deepEqual(merged.extensions, [".md"]);
+	assert.ok(merged.diagFile.endsWith(path.join(".dsh", "obsidian-bridge.diag.jsonl")));
+});
+
+test("readConfigFile reads a JSON object and refuses anything else", () => {
+	const dir = mkdtempSync(path.join(tmpdir(), "obsidian-bridge-cfg-"));
+	const good = path.join(dir, "good.json");
+	writeFileSync(good, JSON.stringify({ vaultRoot: "/vault" }));
+	assert.deepEqual(readConfigFile(good), { vaultRoot: "/vault" });
+
+	const array = path.join(dir, "array.json");
+	writeFileSync(array, "[1,2,3]");
+	assert.deepEqual(readConfigFile(array), {});
+
+	const broken = path.join(dir, "broken.json");
+	writeFileSync(broken, "{ not json");
+	assert.deepEqual(readConfigFile(broken), {});
+	assert.deepEqual(readConfigFile(path.join(dir, "missing.json")), {});
+});
+
+test("the package declares a bundle patch that exists in the repo (installability)", () => {
+	const manifest = JSON.parse(readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"));
+	const patch = manifest.dsh?.bundle?.patch;
+	assert.equal(typeof patch, "string");
+	const patchFile = path.join(REPO_ROOT, patch);
+	assert.equal(existsSync(patchFile), true, `bundle patch ${patch} is missing from the repo`);
+	assert.match(readFileSync(patchFile, "utf8"), /id: obsidian-bridge/);
 });
 
 test("resolveVaultFile accepts a relative path inside the vault", () => {
@@ -104,19 +163,19 @@ test("resolveVaultFile rejects missing files, directories, and control character
 
 test("resolveVaultFile fails closed when vaultRoot is not configured or missing", () => {
 	const { vaultRoot } = makeVault();
-	assert.equal(resolveVaultFile(normalizeConfig({}), "note.md").ok, false);
-	const gone = normalizeConfig({ vaultRoot: path.join(vaultRoot, "nope") });
+	assert.equal(resolveVaultFile(normalizeConfig({}, {}), "note.md").ok, false);
+	const gone = normalizeConfig({ vaultRoot: path.join(vaultRoot, "nope") }, {});
 	assert.equal(resolveVaultFile(gone, "note.md").ok, false);
 });
 
 test("obsidianUri percent-encodes each path segment and prefers the vault name", () => {
-	const config = normalizeConfig({ vaultRoot: "/vault", vaultName: "My Notes" });
+	const config = normalizeConfig({ vaultRoot: "/vault", vaultName: "My Notes" }, {});
 	const file = { rel: "notes/a b/中文 & co.md", abs: "/vault/notes/a b/中文 & co.md" };
 	const withName = obsidianUri(config, file);
 	assert.equal(withName, "obsidian://open?vault=My%20Notes&file=notes/a%20b/%E4%B8%AD%E6%96%87%20%26%20co.md");
 	assert.equal(withName.includes("notes/a%20b"), true);
 
-	const withoutName = obsidianUri(normalizeConfig({ vaultRoot: "/vault" }), file);
+	const withoutName = obsidianUri(normalizeConfig({ vaultRoot: "/vault" }, {}), file);
 	assert.equal(withoutName, `obsidian://open?path=${encodeURIComponent(file.abs)}`);
 });
 

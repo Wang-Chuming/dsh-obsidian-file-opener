@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/dsh-obsidian-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "One-click Obsidian channel for DeepSeek Harness: opening a vault file from the Web conversation (or from a model tool) launches the Obsidian app instead of the in-app preview.",
   "license": "MIT",
@@ -33,6 +33,7 @@
   "files": [
     "index.js",
     "client.js",
+    "cordis.patch.yml",
     "cordis.patch.example.yml",
     "locale/*.json",
     "icon.svg",

@@ -1,21 +1,18 @@
-# dsh-obsidian-bridge bundle layer:
-# one Host row owning the authenticated Obsidian routes and the `open_in_obsidian`
-# model tool, plus its Client half that redirects vault file opens to the Obsidian app.
+# Inline-config reference for dsh-obsidian-bridge.
 #
-# HOW TO USE
-#   1. cp cordis.patch.example.yml cordis.patch.yml
-#   2. fill in `vaultRoot` (required) and `vaultName` (optional)
+# You normally do NOT copy this file: the package ships a `cordis.patch.yml` with the
+# same row but no `config:`, and the Host half reads `~/.dsh/obsidian-bridge.config.json`
+# (or the file named by `configFile` / DSH_OBSIDIAN_BRIDGE_CONFIG) for the settings below.
 #
-# `cordis.patch.yml` is gitignored on purpose: your personal vault path stays local,
-# and `git pull` never fights with your machine-specific configuration.
-# With an empty `vaultRoot` the plugin loads but stays inert: the config route answers
-# `ok: false` and the client keeps the shipped in-app preview for every file.
+# Copy this file over the installed `cordis.patch.yml` only if you prefer inline settings.
+# The row's `config:` block wins over the JSON file field by field. Note that edits inside
+# node_modules are lost on the next plugin update — the JSON file is the stable place.
 - insert:
     - id: obsidian-bridge
       name: '@dsh-external/dsh-obsidian-bridge'
       config:
-        # REQUIRED — absolute path of the Obsidian vault to bridge to.
-        vaultRoot: ''
+        # REQUIRED — absolute path of the Obsidian vault to bridge to (`~` allowed).
+        vaultRoot: '/absolute/path/to/your/obsidian/vault'
         # Optional — the vault name as Obsidian shows it. When empty, the bridge uses
         # `obsidian://open?path=<absolute path>` instead of `?vault=…&file=…`.
         vaultName: ''
@@ -28,3 +25,5 @@
         # First-load self-test target, relative to the vault root (set selftest: false to skip).
         testPath: HOME.md
         selftest: true
+        # Optional — JSONL diagnostic log (default ~/.dsh/obsidian-bridge.diag.jsonl).
+        # diagFile: '~/.dsh/obsidian-bridge.diag.jsonl'

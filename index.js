@@ -11,7 +11,7 @@
 // click on a file reference in the conversation reaches the open route instead of
 // the in-app document preview, so one click lands in the Obsidian vault.
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -22,29 +22,84 @@ const MAX_BODY_BYTES = 64 * 1024;
 const OPEN_SETTLE_MS = 1500;
 const DEFAULT_EXTENSIONS = [".md"];
 const DEFAULT_DIAG_FILE = path.join(homedir(), ".dsh", "obsidian-bridge.diag.jsonl");
+const DEFAULT_CONFIG_FILE = path.join(homedir(), ".dsh", "obsidian-bridge.config.json");
+const CONFIG_FILE_ENV = "DSH_OBSIDIAN_BRIDGE_CONFIG";
 
-/** Read the bundle row's raw config (the package exports no Config schema, so the row passes it through). */
-function normalizeConfig(raw) {
-	const value = raw !== null && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-	const vaultRoot = typeof value.vaultRoot === "string" && value.vaultRoot.trim() !== ""
-		? path.resolve(value.vaultRoot.trim())
-		: "";
-	const vaultName = typeof value.vaultName === "string" ? value.vaultName : "";
-	const extensions = Array.isArray(value.extensions)
-		? value.extensions
-			.filter((entry) => typeof entry === "string" && entry.startsWith("."))
-			.map((entry) => entry.toLowerCase())
-		: DEFAULT_EXTENSIONS;
-	const testPath = typeof value.testPath === "string" && value.testPath !== "" ? value.testPath : "HOME.md";
-	const diagFile = typeof value.diagFile === "string" && value.diagFile !== "" ? path.resolve(value.diagFile) : DEFAULT_DIAG_FILE;
+/** A plain object, or an empty one for anything else. */
+function asRecord(value) {
+	return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+/** Expand a leading `~` so JSON-config paths behave like shell paths. */
+function expandHome(text) {
+	const value = text.trim();
+	if (value === "~") return homedir();
+	if (value.startsWith("~/") || value.startsWith("~\\")) return path.join(homedir(), value.slice(2));
+	return value;
+}
+
+/** Resolve one path field; empty strings and non-strings mean "not set". */
+function resolvePath(value, fallback) {
+	if (typeof value !== "string" || value.trim() === "") return fallback;
+	return path.resolve(expandHome(value));
+}
+
+/** Which config file to read: the bundle row's `configFile`, then the env var, then the ~/.dsh default. */
+function resolveConfigFile(row) {
+	if (typeof row.configFile === "string" && row.configFile.trim() !== "") return path.resolve(expandHome(row.configFile));
+	const fromEnv = process.env[CONFIG_FILE_ENV];
+	if (typeof fromEnv === "string" && fromEnv.trim() !== "") return path.resolve(expandHome(fromEnv));
+	return DEFAULT_CONFIG_FILE;
+}
+
+/** Read the user-level JSON config; a missing, malformed or non-object file yields no overrides. */
+function readConfigFile(file) {
+	try {
+		return asRecord(JSON.parse(readFileSync(file, "utf8")));
+	} catch {
+		return {};
+	}
+}
+
+/** One field's value: the bundle row's explicit value wins, then the config file, then the default. */
+function pickField(row, file, key, fallback) {
+	if (row[key] !== undefined) return row[key];
+	if (file[key] !== undefined) return file[key];
+	return fallback;
+}
+
+/** Build the effective config from an already-read bundle row and config-file body. */
+function buildConfig(rawRow, rawFile, configFile) {
+	const row = asRecord(rawRow);
+	const file = asRecord(rawFile);
+	const vaultName = pickField(row, file, "vaultName", "");
+	const extensions = pickField(row, file, "extensions", DEFAULT_EXTENSIONS);
+	const testPath = pickField(row, file, "testPath", "HOME.md");
 	return {
-		vaultRoot,
-		vaultName,
-		extensions,
-		testPath,
-		diagFile,
-		selftest: value.selftest !== false
+		vaultRoot: resolvePath(pickField(row, file, "vaultRoot", ""), ""),
+		vaultName: typeof vaultName === "string" ? vaultName : "",
+		extensions: Array.isArray(extensions)
+			? extensions
+				.filter((entry) => typeof entry === "string" && entry.startsWith("."))
+				.map((entry) => entry.toLowerCase())
+			: DEFAULT_EXTENSIONS,
+		testPath: typeof testPath === "string" && testPath !== "" ? testPath : "HOME.md",
+		diagFile: resolvePath(pickField(row, file, "diagFile", DEFAULT_DIAG_FILE), DEFAULT_DIAG_FILE),
+		selftest: pickField(row, file, "selftest", true) !== false,
+		configFile
 	};
+}
+
+/**
+ * Resolve the effective config from the bundle row (the package exports no Config
+ * schema, so the row passes its config through) and the user-level JSON file.
+ * `fileValue` is for tests: pass `{}` to stay hermetic, omit it to read the real file.
+ */
+function normalizeConfig(raw, fileValue) {
+	const row = asRecord(raw);
+	const configFile = resolveConfigFile(row);
+	const file = fileValue !== undefined ? asRecord(fileValue) : readConfigFile(configFile);
+	return buildConfig(row, file, configFile);
 }
 
 function sendJson(res, status, payload) {
@@ -214,7 +269,8 @@ function apply(ctx, rawConfig) {
 		vaultRoot: config.vaultRoot,
 		vaultName: config.vaultName,
 		extensions: config.extensions,
-		selftest: config.selftest
+		selftest: config.selftest,
+		configFile: config.configFile
 	});
 
 	let webServer;
@@ -242,7 +298,8 @@ function apply(ctx, rawConfig) {
 			vaultName: config.vaultName,
 			extensions: config.extensions,
 			selftest: config.selftest,
-			testPath: config.testPath
+			testPath: config.testPath,
+			configFile: config.configFile
 		});
 	};
 
@@ -354,4 +411,4 @@ export default {
 
 // Internal helpers, re-exported so the test suite can exercise them without a running Harness.
 // They are not part of the plugin's stable public surface.
-export { normalizeConfig, resolveVaultFile, obsidianUri, openerFor };
+export { normalizeConfig, buildConfig, readConfigFile, resolveVaultFile, obsidianUri, openerFor };

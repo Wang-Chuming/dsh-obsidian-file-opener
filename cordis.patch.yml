@@ -1,0 +1,17 @@
+# dsh-obsidian-bridge bundle layer:
+# one Host row owning the authenticated Obsidian routes and the `open_in_obsidian`
+# model tool, plus its Client half that redirects vault file opens to the Obsidian app.
+#
+# This file ships with the package and stays free of user data. Configure the plugin
+# in ~/.dsh/obsidian-bridge.config.json (see README) — the Host half reads that file
+# for `vaultRoot`, `vaultName`, `extensions`, `testPath`, `selftest` and `diagFile`.
+#
+# Advanced: this row's `config:` block beats the JSON file, so you can inline settings
+# here instead. It is also the way a profile-level override changes them:
+#   - id: obsidian-bridge
+#     name: '@dsh-external/dsh-obsidian-bridge'
+#     config:
+#       vaultRoot: '/absolute/path/to/your/obsidian/vault'
+- insert:
+    - id: obsidian-bridge
+      name: '@dsh-external/dsh-obsidian-bridge'

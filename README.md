@@ -64,13 +64,24 @@ Two halves, one package:
 
 | Route | Method | Purpose |
 | --- | --- | --- |
-| `/obsidian-bridge/config` | `GET` | Vault configuration for the client half (`vaultRoot`, `vaultName`, `extensions`, `testPath`, `selftest`, `ok`) |
+| `/obsidian-bridge/config` | `GET` | Vault configuration for the client half (`vaultRoot`, `vaultName`, `extensions`, `testPath`, `selftest`, `configFile`, `ok`) |
 | `/obsidian-bridge/open` | `POST` | `{ path, source? }` → open one vault file; `200` on success, `422` with an error otherwise |
 | `/obsidian-bridge/diag` | `POST` | Append one diagnostic line from the browser |
 
 All three ask `ctx.connection.requestRejection(req)` first. That reuses the Harness Host/Origin
 fence (DNS-rebinding and cross-site protection) and the browser login cookie. If the connection
 service is absent the bridge answers **503** instead of serving — it fails closed.
+
+### Where the configuration comes from
+
+The Host half resolves its settings once at startup, in this order:
+
+1. the bundle row's `config:` block (the packaged `cordis.patch.yml` ships without one);
+2. `~/.dsh/obsidian-bridge.config.json` — the recommended place for your vault path;
+3. the defaults in the table below.
+
+With no `vaultRoot` from either source the plugin loads but stays **inert**: the config route
+answers `ok: false` and the client keeps the shipped in-app preview for every file.
 
 ## Requirements
 
@@ -85,57 +96,40 @@ implemented but less exercised — issues and patches welcome.
 
 ## Install
 
-### 1. Clone next to your other plugins
+### 1. Add the plugin to your profile
 
 ```bash
-git clone https://github.com/Wang-Chuming/dsh-obsidian-bridge.git ~/dsh-obsidian-bridge
-cd ~/dsh-obsidian-bridge
-cp cordis.patch.example.yml cordis.patch.yml
-$EDITOR cordis.patch.yml        # set vaultRoot (required) and vaultName (optional)
+dsh plugin --profile <profile> add github:Wang-Chuming/dsh-obsidian-bridge
 ```
 
-`cordis.patch.yml` is gitignored **on purpose**: your vault path stays on your machine and
-`git pull` never conflicts with it. `cordis.patch.example.yml` documents every field.
+`<profile>` is `desktop`, `web`, or `headless`. The command installs the package and, because
+the package declares `dsh.bundle`, adds it to `dsh.profile.bundles` automatically. On the
+Desktop app you can instead install it through **Settings → Plugins** (or the Plugin Market
+once the plugin is listed), which manages the Desktop profile for you.
 
-### 2. Link it into your DSH profile
+### 2. Point it at your vault
 
-Edit the profile package file — `~/.dsh/profiles/<profile>/package.json`, where `<profile>` is
-`desktop`, `web`, or `headless`:
-
-```jsonc
+```bash
+cat > ~/.dsh/obsidian-bridge.config.json <<'JSON'
 {
-  "dependencies": {
-    "@dsh-external/dsh-obsidian-bridge": "link:/Users/you/dsh-obsidian-bridge"
-  },
-  "dsh": {
-    "profile": {
-      "bundles": [
-        // … the bundles you already have …
-        "@dsh-external/dsh-obsidian-bridge"
-      ]
-    }
-  }
+  "vaultRoot": "/Users/you/Research/Research-Vault",
+  "vaultName": "Research-Vault",
+  "extensions": [".md", ".canvas", ".base"]
 }
+JSON
 ```
 
-The `name` in `cordis.patch.yml` must match the dependency name above.
+`vaultRoot` is the only required field; `~` is expanded in every path. A missing or malformed
+file simply means “no overrides” — the plugin then stays inert instead of guessing.
 
-### 3. Install and restart
+### 3. Restart and confirm the channel
 
-```bash
-cd ~/.dsh/profiles/<profile>
-pnpm install
-```
-
-Restart the Harness (a client-only reload is not enough: the Host half registers routes and
-the model tool at startup).
-
-### 4. Confirm the channel
-
-After the first page load, `~/.dsh/obsidian-bridge.diag.jsonl` should contain roughly:
+Restart the Harness (a client-only reload is not enough: the Host half reads the config and
+registers routes and the model tool at startup). After the first page load,
+`~/.dsh/obsidian-bridge.diag.jsonl` should contain roughly:
 
 ```json
-{"event":"host-activate","vaultRoot":"/path/to/your/vault","extensions":[".md"],"selftest":true}
+{"event":"host-activate","vaultRoot":"/path/to/your/vault","extensions":[".md"],"selftest":true,"configFile":"/Users/you/.dsh/obsidian-bridge.config.json"}
 {"client":true,"wrapped":true,"hasSessions":true,"event":"client-activate"}
 {"client":true,"ok":true,"vaultRoot":"/path/to/your/vault","event":"client-config"}
 {"event":"selftest-trigger","path":"/path/to/your/vault/HOME.md"}
@@ -145,18 +139,37 @@ After the first page load, `~/.dsh/obsidian-bridge.diag.jsonl` should contain ro
 Then plain-click any vault note link in the conversation: it opens in Obsidian. Cmd/Ctrl-click
 the same link: the in-app preview opens.
 
+### Development install (clone + link)
+
+For working on the plugin itself, link a checkout instead:
+
+```bash
+git clone https://github.com/Wang-Chuming/dsh-obsidian-bridge.git ~/dsh-obsidian-bridge
+```
+
+Add `"@dsh-external/dsh-obsidian-bridge": "link:/Users/you/dsh-obsidian-bridge"` to the profile's
+`dependencies`, add `@dsh-external/dsh-obsidian-bridge` to `dsh.profile.bundles`, run
+`pnpm install` in `~/.dsh/profiles/<profile>`, and restart. The row `name` in
+`cordis.patch.yml` must match the dependency name.
+
 ## Configuration
 
-Set in `cordis.patch.yml` under the bundle row's `config`:
+Recommended: `~/.dsh/obsidian-bridge.config.json`.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `vaultRoot` | *(required)* | Absolute path of the Obsidian vault. Empty ⇒ the bridge loads but stays inert. |
+| `vaultRoot` | *(required)* | Absolute path of the Obsidian vault (`~` allowed). Empty ⇒ the bridge loads but stays inert. |
 | `vaultName` | `''` | Vault name as Obsidian shows it. Empty ⇒ `obsidian://open?path=…` instead of `?vault=…&file=…`. |
 | `extensions` | `['.md']` | Which vault files are taken away from the in-app preview. Empty array ⇒ every vault file. |
 | `testPath` | `HOME.md` | Target of the first-load self-test, relative to `vaultRoot`. |
 | `selftest` | `true` | Run the end-to-end self-test once per browser (it opens Obsidian once). |
 | `diagFile` | `~/.dsh/obsidian-bridge.diag.jsonl` | JSONL diagnostic log. |
+| `configFile` | `~/.dsh/obsidian-bridge.config.json` | Where the JSON config is read from. Can also be set with the `DSH_OBSIDIAN_BRIDGE_CONFIG` environment variable. |
+
+The bundle row's own `config:` block wins over the JSON file field by field; the packaged
+`cordis.patch.yml` ships without `config:` on purpose, so plugin updates never touch your
+settings. `cordis.patch.example.yml` documents the inline form, and the header of
+`cordis.patch.yml` shows how a profile-level patch can override a single field.
 
 ## Security notes
 
@@ -170,6 +183,7 @@ Set in `cordis.patch.yml` under the bundle row's `config`:
 - **Diagnostics contain vault paths.** They are written to `~/.dsh/`, never to the vault or the
   repository. Delete the file, point `diagFile` elsewhere, or set `selftest: false` if you do
   not want it.
+- The config file is read as data only — no `require`, no evaluation, no network access.
 
 ## Limitations
 
@@ -189,16 +203,17 @@ Set in `cordis.patch.yml` under the bundle row's `config`:
 
 ```bash
 npm run check   # syntax check for the host half, client half, and tests
-npm test        # node --test: config normalisation, path containment, URI encoding, openers
+npm test        # node --test: config precedence, path containment, URI encoding, openers
 ```
 
 | Path | Role |
 | --- | --- |
-| `index.js` | Host half: routes, `open_in_obsidian` tool, containment, opener |
+| `index.js` | Host half: routes, `open_in_obsidian` tool, config resolution, containment, opener |
 | `client.js` | Client half: wraps `openResource`, gesture gating, self-test |
 | `locale/{en,zh}.json` | Plugin Manager title/description |
 | `icon.svg` | Plugin icon |
-| `cordis.patch.example.yml` | Documented bundle-layer configuration |
+| `cordis.patch.yml` | Bundle layer shipped with the package (no user data) |
+| `cordis.patch.example.yml` | Inline-config reference form |
 | `test/host.test.mjs` | Node test suite for the host helpers |
 
 The client half needs a real browser (and a running Harness) to exercise; the repository's CI

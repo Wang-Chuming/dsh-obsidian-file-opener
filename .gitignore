@@ -1,5 +1,4 @@
 node_modules/
-cordis.patch.yml
 *.diag.jsonl
 *.log
 *.tgz
