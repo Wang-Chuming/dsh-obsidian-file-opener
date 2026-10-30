@@ -18,7 +18,7 @@ const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Build a throwaway vault: <root>/note.md, <root>/sub/deep.md, plus an outside file. */
 function makeVault() {
-	const base = mkdtempSync(path.join(tmpdir(), "obsidian-bridge-"));
+	const base = mkdtempSync(path.join(tmpdir(), "obsidian-file-opener-"));
 	const vaultRoot = path.join(base, "vault");
 	const outside = path.join(base, "outside");
 	mkdirSync(path.join(vaultRoot, "sub"), { recursive: true });
@@ -42,8 +42,8 @@ test("normalizeConfig fills defaults and resolves the vault root", () => {
 	assert.equal(config.vaultName, "");
 	assert.equal(config.testPath, "HOME.md");
 	assert.equal(config.selftest, true);
-	assert.ok(config.diagFile.endsWith(path.join(".dsh", "obsidian-bridge.diag.jsonl")));
-	assert.ok(config.configFile.endsWith(path.join(".dsh", "obsidian-bridge.config.json")));
+	assert.ok(config.diagFile.endsWith(path.join(".dsh", "obsidian-file-opener.diag.jsonl")));
+	assert.ok(config.configFile.endsWith(path.join(".dsh", "obsidian-file-opener.config.json")));
 });
 
 test("normalizeConfig lowercases extensions, accepts an empty list, and drops junk entries", () => {
@@ -88,11 +88,11 @@ test("buildConfig ignores non-string and empty path values", () => {
 	const merged = buildConfig({ vaultRoot: 7, extensions: ".md" }, { vaultRoot: "", diagFile: 42 }, "/tmp/c.json");
 	assert.equal(merged.vaultRoot, "");
 	assert.deepEqual(merged.extensions, [".md"]);
-	assert.ok(merged.diagFile.endsWith(path.join(".dsh", "obsidian-bridge.diag.jsonl")));
+	assert.ok(merged.diagFile.endsWith(path.join(".dsh", "obsidian-file-opener.diag.jsonl")));
 });
 
 test("readConfigFile reads a JSON object and refuses anything else", () => {
-	const dir = mkdtempSync(path.join(tmpdir(), "obsidian-bridge-cfg-"));
+	const dir = mkdtempSync(path.join(tmpdir(), "obsidian-file-opener-cfg-"));
 	const good = path.join(dir, "good.json");
 	writeFileSync(good, JSON.stringify({ vaultRoot: "/vault" }));
 	assert.deepEqual(readConfigFile(good), { vaultRoot: "/vault" });
@@ -113,7 +113,7 @@ test("the package declares a bundle patch that exists in the repo (installabilit
 	assert.equal(typeof patch, "string");
 	const patchFile = path.join(REPO_ROOT, patch);
 	assert.equal(existsSync(patchFile), true, `bundle patch ${patch} is missing from the repo`);
-	assert.match(readFileSync(patchFile, "utf8"), /id: obsidian-bridge/);
+	assert.match(readFileSync(patchFile, "utf8"), /id: obsidian-file-opener/);
 });
 
 test("resolveVaultFile accepts a relative path inside the vault", () => {

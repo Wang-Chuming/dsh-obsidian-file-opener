@@ -1,23 +1,23 @@
-// @dsh-external/dsh-obsidian-bridge — Client half (browser, plain ESM-in-loader form).
+// @dsh-external/dsh-obsidian-file-opener — Client half (browser, plain ESM-in-loader form).
 //
 // It wraps `ctx.sidebarRight.openResource`, the single navigation controller every
 // file-open path in the Web GUI goes through (conversation markdown file links,
 // tool-row path links, inline file mentions, @file references, the file tree).
 //
-//   plain click on a vault file  -> POST /obsidian-bridge/open -> Obsidian app
+//   plain click on a vault file  -> POST /obsidian-file-opener/open -> Obsidian app
 //   Cmd/Ctrl-click               -> the shipped in-app document preview
 //   anything outside the vault   -> the shipped in-app document preview
 //
 // One first-run self-test exercises the whole chain once (guarded by localStorage)
-// so the channel is verified end-to-end and diagnosed in ~/.dsh/obsidian-bridge.diag.jsonl.
+// so the channel is verified end-to-end and diagnosed in ~/.dsh/obsidian-file-opener.diag.jsonl.
 window.__ModuleLoader__.load({
-	id: "@dsh-external/dsh-obsidian-bridge",
+	id: "@dsh-external/dsh-obsidian-file-opener",
 	factory: () => {
 		const FILE_ADDRESS_PREFIX = "dsh-resource://file/";
-		const CONFIG_ROUTE = "/obsidian-bridge/config";
-		const OPEN_ROUTE = "/obsidian-bridge/open";
-		const DIAG_ROUTE = "/obsidian-bridge/diag";
-		const SELFTEST_KEY = "dsh-obsidian-bridge.selftest.v1";
+		const CONFIG_ROUTE = "/obsidian-file-opener/config";
+		const OPEN_ROUTE = "/obsidian-file-opener/open";
+		const DIAG_ROUTE = "/obsidian-file-opener/diag";
+		const SELFTEST_KEY = "dsh-obsidian-file-opener.selftest.v1";
 		const GESTURE_WINDOW_MS = 600;
 
 		let config;
@@ -278,7 +278,7 @@ window.__ModuleLoader__.load({
 					retryTimer = undefined;
 					if (cleanup !== undefined) cleanup();
 					cleanup = undefined;
-				}, "obsidian-bridge: client cleanup");
+				}, "obsidian-file-opener: client cleanup");
 			} catch {
 				/* the plugin still works without effect-scoped cleanup */
 			}
@@ -351,7 +351,7 @@ window.__ModuleLoader__.load({
 		}
 
 		return {
-			name: "@dsh-external/dsh-obsidian-bridge",
+			name: "@dsh-external/dsh-obsidian-file-opener",
 			apply
 		};
 	}

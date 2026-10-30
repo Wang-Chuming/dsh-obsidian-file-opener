@@ -1,10 +1,10 @@
-# dsh-obsidian-bridge
+# dsh-obsidian-file-opener
 
-[![CI](https://github.com/Wang-Chuming/dsh-obsidian-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/Wang-Chuming/dsh-obsidian-bridge/actions/workflows/ci.yml)
+[![CI](https://github.com/Wang-Chuming/dsh-obsidian-file-opener/actions/workflows/ci.yml/badge.svg)](https://github.com/Wang-Chuming/dsh-obsidian-file-opener/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
 
-An **Obsidian channel for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI**:
+An **Obsidian file opener for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI**:
 click a file that lives in your Obsidian vault — in the conversation, in a tool output, in a
 file mention, in the file tree — and it opens **in Obsidian**, not in the in-app preview.
 
@@ -12,7 +12,7 @@ file mention, in the file tree — and it opens **in Obsidian**, not in the in-a
 
 The Harness Web GUI ships a good in-app preview. But when your notes are an Obsidian vault,
 the preview is the wrong destination: you want backlinks, the graph, your plugins, your
-themes. This plugin installs a one-way channel from the conversation to the Obsidian app
+themes. This plugin routes that click straight to the Obsidian app
 and leaves everything else — Cmd/Ctrl-click, files outside the vault, programmatic opens —
 exactly as the Harness shipped it.
 
@@ -38,7 +38,7 @@ sequenceDiagram
 
     User->>Client: plain click on a vault file reference
     Client->>Client: gesture within 600 ms, not Cmd/Ctrl, path inside vaultRoot
-    Client->>Host: POST /obsidian-bridge/open { path, source }
+    Client->>Host: POST /obsidian-file-opener/open { path, source }
     Host->>Host: connection.requestRejection(req) — auth + origin fence
     Host->>Host: realpath containment inside vaultRoot
     Host->>OS: /usr/bin/open obsidian://open?…
@@ -64,9 +64,9 @@ Two halves, one package:
 
 | Route | Method | Purpose |
 | --- | --- | --- |
-| `/obsidian-bridge/config` | `GET` | Vault configuration for the client half (`vaultRoot`, `vaultName`, `extensions`, `testPath`, `selftest`, `configFile`, `ok`) |
-| `/obsidian-bridge/open` | `POST` | `{ path, source? }` → open one vault file; `200` on success, `422` with an error otherwise |
-| `/obsidian-bridge/diag` | `POST` | Append one diagnostic line from the browser |
+| `/obsidian-file-opener/config` | `GET` | Vault configuration for the client half (`vaultRoot`, `vaultName`, `extensions`, `testPath`, `selftest`, `configFile`, `ok`) |
+| `/obsidian-file-opener/open` | `POST` | `{ path, source? }` → open one vault file; `200` on success, `422` with an error otherwise |
+| `/obsidian-file-opener/diag` | `POST` | Append one diagnostic line from the browser |
 
 All three ask `ctx.connection.requestRejection(req)` first. That reuses the Harness Host/Origin
 fence (DNS-rebinding and cross-site protection) and the browser login cookie. If the connection
@@ -77,7 +77,7 @@ service is absent the bridge answers **503** instead of serving — it fails clo
 The Host half resolves its settings once at startup, in this order:
 
 1. the bundle row's `config:` block (the packaged `cordis.patch.yml` ships without one);
-2. `~/.dsh/obsidian-bridge.config.json` — the recommended place for your vault path;
+2. `~/.dsh/obsidian-file-opener.config.json` — the recommended place for your vault path;
 3. the defaults in the table below.
 
 With no `vaultRoot` from either source the plugin loads but stays **inert**: the config route
@@ -99,7 +99,7 @@ implemented but less exercised — issues and patches welcome.
 ### 1. Add the plugin to your profile
 
 ```bash
-dsh plugin --profile <profile> add github:Wang-Chuming/dsh-obsidian-bridge
+dsh plugin --profile <profile> add github:Wang-Chuming/dsh-obsidian-file-opener
 ```
 
 `<profile>` is `desktop`, `web`, or `headless`. The command installs the package and, because
@@ -110,7 +110,7 @@ once the plugin is listed), which manages the Desktop profile for you.
 ### 2. Point it at your vault
 
 ```bash
-cat > ~/.dsh/obsidian-bridge.config.json <<'JSON'
+cat > ~/.dsh/obsidian-file-opener.config.json <<'JSON'
 {
   "vaultRoot": "/Users/you/Research/Research-Vault",
   "vaultName": "Research-Vault",
@@ -126,10 +126,10 @@ file simply means “no overrides” — the plugin then stays inert instead of 
 
 Restart the Harness (a client-only reload is not enough: the Host half reads the config and
 registers routes and the model tool at startup). After the first page load,
-`~/.dsh/obsidian-bridge.diag.jsonl` should contain roughly:
+`~/.dsh/obsidian-file-opener.diag.jsonl` should contain roughly:
 
 ```json
-{"event":"host-activate","vaultRoot":"/path/to/your/vault","extensions":[".md"],"selftest":true,"configFile":"/Users/you/.dsh/obsidian-bridge.config.json"}
+{"event":"host-activate","vaultRoot":"/path/to/your/vault","extensions":[".md"],"selftest":true,"configFile":"/Users/you/.dsh/obsidian-file-opener.config.json"}
 {"client":true,"wrapped":true,"hasSessions":true,"event":"client-activate"}
 {"client":true,"ok":true,"vaultRoot":"/path/to/your/vault","event":"client-config"}
 {"event":"selftest-trigger","path":"/path/to/your/vault/HOME.md"}
@@ -144,17 +144,17 @@ the same link: the in-app preview opens.
 For working on the plugin itself, link a checkout instead:
 
 ```bash
-git clone https://github.com/Wang-Chuming/dsh-obsidian-bridge.git ~/dsh-obsidian-bridge
+git clone https://github.com/Wang-Chuming/dsh-obsidian-file-opener.git ~/dsh-obsidian-file-opener
 ```
 
-Add `"@dsh-external/dsh-obsidian-bridge": "link:/Users/you/dsh-obsidian-bridge"` to the profile's
-`dependencies`, add `@dsh-external/dsh-obsidian-bridge` to `dsh.profile.bundles`, run
+Add `"@dsh-external/dsh-obsidian-file-opener": "link:/Users/you/dsh-obsidian-file-opener"` to the profile's
+`dependencies`, add `@dsh-external/dsh-obsidian-file-opener` to `dsh.profile.bundles`, run
 `pnpm install` in `~/.dsh/profiles/<profile>`, and restart. The row `name` in
 `cordis.patch.yml` must match the dependency name.
 
 ## Configuration
 
-Recommended: `~/.dsh/obsidian-bridge.config.json`.
+Recommended: `~/.dsh/obsidian-file-opener.config.json`.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
@@ -163,8 +163,8 @@ Recommended: `~/.dsh/obsidian-bridge.config.json`.
 | `extensions` | `['.md']` | Which vault files are taken away from the in-app preview. Empty array ⇒ every vault file. |
 | `testPath` | `HOME.md` | Target of the first-load self-test, relative to `vaultRoot`. |
 | `selftest` | `true` | Run the end-to-end self-test once per browser (it opens Obsidian once). |
-| `diagFile` | `~/.dsh/obsidian-bridge.diag.jsonl` | JSONL diagnostic log. |
-| `configFile` | `~/.dsh/obsidian-bridge.config.json` | Where the JSON config is read from. Can also be set with the `DSH_OBSIDIAN_BRIDGE_CONFIG` environment variable. |
+| `diagFile` | `~/.dsh/obsidian-file-opener.diag.jsonl` | JSONL diagnostic log. |
+| `configFile` | `~/.dsh/obsidian-file-opener.config.json` | Where the JSON config is read from. Can also be set with the `DSH_OBSIDIAN_FILE_OPENER_CONFIG` environment variable. |
 
 The bundle row's own `config:` block wins over the JSON file field by field; the packaged
 `cordis.patch.yml` ships without `config:` on purpose, so plugin updates never touch your

@@ -1,8 +1,8 @@
 {
-  "name": "@dsh-external/dsh-obsidian-bridge",
-  "version": "0.2.0",
+  "name": "@dsh-external/dsh-obsidian-file-opener",
+  "version": "0.3.0",
   "private": true,
-  "description": "One-click Obsidian channel for DeepSeek Harness: opening a vault file from the Web conversation (or from a model tool) launches the Obsidian app instead of the in-app preview.",
+  "description": "One-click Obsidian file opener for DeepSeek Harness: clicking a vault file reference in the Web conversation (or asking the agent through the open_in_obsidian tool) launches the Obsidian app instead of the in-app preview.",
   "license": "MIT",
   "author": "Wang-Chuming",
   "keywords": [
@@ -11,16 +11,17 @@
     "dsh-plugin",
     "obsidian",
     "obsidian-vault",
+    "file-opener",
     "web-gui",
     "plugin"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Wang-Chuming/dsh-obsidian-bridge.git"
+    "url": "git+https://github.com/Wang-Chuming/dsh-obsidian-file-opener.git"
   },
-  "homepage": "https://github.com/Wang-Chuming/dsh-obsidian-bridge#readme",
+  "homepage": "https://github.com/Wang-Chuming/dsh-obsidian-file-opener#readme",
   "bugs": {
-    "url": "https://github.com/Wang-Chuming/dsh-obsidian-bridge/issues"
+    "url": "https://github.com/Wang-Chuming/dsh-obsidian-file-opener/issues"
   },
   "type": "module",
   "main": "index.js",

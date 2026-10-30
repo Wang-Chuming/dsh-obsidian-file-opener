@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Obsidian 通道",
-    "description": "从对话框直达 Obsidian 库：点击聊天里的库内文件引用（以及工具行、@文件引用、文件树中的库内文件）会直接在 Obsidian 中打开对应笔记，而不是 DSH 内置预览；Cmd/Ctrl+点击仍然打开内置预览。"
+    "title": "Obsidian 文件打开器",
+    "description": "从对话框直达 Obsidian 库：点击库内文件引用（聊天链接、工具行路径、@文件引用、文件树中的库内文件）会直接在 Obsidian 中打开对应笔记，而不是 DSH 内置预览；Cmd/Ctrl+点击仍然打开内置预览。"
   }
 }

@@ -1,15 +1,15 @@
-# Inline-config reference for dsh-obsidian-bridge.
+# Inline-config reference for dsh-obsidian-file-opener.
 #
 # You normally do NOT copy this file: the package ships a `cordis.patch.yml` with the
-# same row but no `config:`, and the Host half reads `~/.dsh/obsidian-bridge.config.json`
-# (or the file named by `configFile` / DSH_OBSIDIAN_BRIDGE_CONFIG) for the settings below.
+# same row but no `config:`, and the Host half reads `~/.dsh/obsidian-file-opener.config.json`
+# (or the file named by `configFile` / DSH_OBSIDIAN_FILE_OPENER_CONFIG) for the settings below.
 #
 # Copy this file over the installed `cordis.patch.yml` only if you prefer inline settings.
 # The row's `config:` block wins over the JSON file field by field. Note that edits inside
 # node_modules are lost on the next plugin update — the JSON file is the stable place.
 - insert:
-    - id: obsidian-bridge
-      name: '@dsh-external/dsh-obsidian-bridge'
+    - id: obsidian-file-opener
+      name: '@dsh-external/dsh-obsidian-file-opener'
       config:
         # REQUIRED — absolute path of the Obsidian vault to bridge to (`~` allowed).
         vaultRoot: '/absolute/path/to/your/obsidian/vault'
@@ -25,5 +25,5 @@
         # First-load self-test target, relative to the vault root (set selftest: false to skip).
         testPath: HOME.md
         selftest: true
-        # Optional — JSONL diagnostic log (default ~/.dsh/obsidian-bridge.diag.jsonl).
-        # diagFile: '~/.dsh/obsidian-bridge.diag.jsonl'
+        # Optional — JSONL diagnostic log (default ~/.dsh/obsidian-file-opener.diag.jsonl).
+        # diagFile: '~/.dsh/obsidian-file-opener.diag.jsonl'

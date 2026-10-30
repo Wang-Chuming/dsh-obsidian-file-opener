@@ -1,9 +1,9 @@
-// @dsh-external/dsh-obsidian-bridge — Host half.
+// @dsh-external/dsh-obsidian-file-opener — Host half.
 //
 // The bridge "DSH Web GUI -> Obsidian" has three pieces:
-//   1. GET  /obsidian-bridge/config  (authenticated) -> the vault bridge config the Web client reads;
-//   2. POST /obsidian-bridge/open    (authenticated) -> open one vault file in the Obsidian app;
-//   3. POST /obsidian-bridge/diag    (authenticated) -> append one diagnostic JSON line.
+//   1. GET  /obsidian-file-opener/config  (authenticated) -> the vault bridge config the Web client reads;
+//   2. POST /obsidian-file-opener/open    (authenticated) -> open one vault file in the Obsidian app;
+//   3. POST /obsidian-file-opener/diag    (authenticated) -> append one diagnostic JSON line.
 // and the model tool `open_in_obsidian`, which performs the same open operation
 // when a user asks the agent to jump to a note.
 //
@@ -15,15 +15,15 @@ import { appendFileSync, mkdirSync, readFileSync, realpathSync, statSync } from 
 import { homedir } from "node:os";
 import path from "node:path";
 
-const CONFIG_ROUTE = "/obsidian-bridge/config";
-const OPEN_ROUTE = "/obsidian-bridge/open";
-const DIAG_ROUTE = "/obsidian-bridge/diag";
+const CONFIG_ROUTE = "/obsidian-file-opener/config";
+const OPEN_ROUTE = "/obsidian-file-opener/open";
+const DIAG_ROUTE = "/obsidian-file-opener/diag";
 const MAX_BODY_BYTES = 64 * 1024;
 const OPEN_SETTLE_MS = 1500;
 const DEFAULT_EXTENSIONS = [".md"];
-const DEFAULT_DIAG_FILE = path.join(homedir(), ".dsh", "obsidian-bridge.diag.jsonl");
-const DEFAULT_CONFIG_FILE = path.join(homedir(), ".dsh", "obsidian-bridge.config.json");
-const CONFIG_FILE_ENV = "DSH_OBSIDIAN_BRIDGE_CONFIG";
+const DEFAULT_DIAG_FILE = path.join(homedir(), ".dsh", "obsidian-file-opener.diag.jsonl");
+const DEFAULT_CONFIG_FILE = path.join(homedir(), ".dsh", "obsidian-file-opener.config.json");
+const CONFIG_FILE_ENV = "DSH_OBSIDIAN_FILE_OPENER_CONFIG";
 
 /** A plain object, or an empty one for anything else. */
 function asRecord(value) {
@@ -167,7 +167,7 @@ function rejected(ctx, req, res) {
 
 /** Resolve one requested path inside the configured vault, refusing escapes and symlinks out. */
 function resolveVaultFile(config, requested) {
-	if (config.vaultRoot === "") return { ok: false, error: "vaultRoot is not configured for @dsh-external/dsh-obsidian-bridge" };
+	if (config.vaultRoot === "") return { ok: false, error: "vaultRoot is not configured for @dsh-external/dsh-obsidian-file-opener" };
 	if (typeof requested !== "string" || requested.length === 0 || requested.length > 4096) return { ok: false, error: "path must be a non-empty string" };
 	if (/[\u0000-\u001f\u007f]/u.test(requested)) return { ok: false, error: "path contains control characters" };
 	const absolute = path.isAbsolute(requested) ? requested : path.join(config.vaultRoot, requested);
@@ -364,9 +364,9 @@ function apply(ctx, rawConfig) {
 		sendJson(res, 200, { ok: true });
 	};
 
-	ctx.effect(() => webServer.register({ kind: "exact", path: CONFIG_ROUTE, handler: configRoute }), "obsidian-bridge: GET config route");
-	ctx.effect(() => webServer.register({ kind: "exact", path: OPEN_ROUTE, handler: openRoute }), "obsidian-bridge: POST open route");
-	ctx.effect(() => webServer.register({ kind: "exact", path: DIAG_ROUTE, handler: diagRoute }), "obsidian-bridge: POST diag route");
+	ctx.effect(() => webServer.register({ kind: "exact", path: CONFIG_ROUTE, handler: configRoute }), "obsidian-file-opener: GET config route");
+	ctx.effect(() => webServer.register({ kind: "exact", path: OPEN_ROUTE, handler: openRoute }), "obsidian-file-opener: POST open route");
+	ctx.effect(() => webServer.register({ kind: "exact", path: DIAG_ROUTE, handler: diagRoute }), "obsidian-file-opener: POST diag route");
 
 	// The model-facing twin of the open route (one operation, two callers).
 	try {
@@ -396,7 +396,7 @@ function apply(ctx, rawConfig) {
 					if (!result.ok) throw new Error(result.error);
 					return `Opened ${result.file} in Obsidian.`;
 				}
-			}), "obsidian-bridge: open_in_obsidian tool");
+			}), "obsidian-file-opener: open_in_obsidian tool");
 		});
 	} catch (error) {
 		writeDiag(config, { event: "host-error", error: `tool registration failed: ${error instanceof Error ? error.message : String(error)}` });
@@ -404,7 +404,7 @@ function apply(ctx, rawConfig) {
 }
 
 export default {
-	name: "obsidian-bridge",
+	name: "obsidian-file-opener",
 	inject: ["webServer", "connection"],
 	apply
 };

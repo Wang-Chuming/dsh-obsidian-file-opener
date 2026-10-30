@@ -4,6 +4,34 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-30
+
+Renamed from `dsh-obsidian-bridge` to `dsh-obsidian-file-opener`. The old name read like the
+IM channel bridges (WeChat/Telegram), which let another app drive DSH; this plugin does the
+opposite — a click in DSH opens a vault note in Obsidian. `file opener` matches the existing
+`dsh-file-opener` family and says what it does. Behaviour is unchanged.
+
+### Changed (breaking)
+
+- Repository and package: `Wang-Chuming/dsh-obsidian-bridge` →
+  `Wang-Chuming/dsh-obsidian-file-opener`; `@dsh-external/dsh-obsidian-bridge` →
+  `@dsh-external/dsh-obsidian-file-opener`.
+- Bundle row id `obsidian-bridge` → `obsidian-file-opener`.
+- Routes `/obsidian-bridge/*` → `/obsidian-file-opener/*` (host and client halves ship together,
+  so the rename is atomic).
+- Config file `~/.dsh/obsidian-bridge.config.json` → `~/.dsh/obsidian-file-opener.config.json`;
+  environment variable `DSH_OBSIDIAN_BRIDGE_CONFIG` → `DSH_OBSIDIAN_FILE_OPENER_CONFIG`.
+- Diagnostic log `~/.dsh/obsidian-bridge.diag.jsonl` → `~/.dsh/obsidian-file-opener.diag.jsonl`.
+- Client self-test `localStorage` key moved to the new namespace.
+
+### Migrating from 0.2.0
+
+1. Move the config file to the new name (or let the plugin stay inert until you re-create it).
+2. In the profile's `package.json`, rename the dependency entry and its `dsh.profile.bundles` entry.
+3. Run `pnpm install` in the profile directory and restart the Harness.
+
+The `open_in_obsidian` tool name and all behaviour are unchanged.
+
 ## [0.2.0] - 2026-10-29
 
 Makes the plugin installable from a URL: the bundle patch is now part of the package, and the
@@ -11,16 +39,16 @@ vault path moved out of the package into a user-level config file.
 
 ### Added
 
-- `~/.dsh/obsidian-bridge.config.json` is now the primary configuration surface. The Host half
+- `~/.dsh/obsidian-file-opener.config.json` is now the primary configuration surface. The Host half
   reads it at startup when the bundle row carries no `config:` of its own; a missing, malformed,
   or non-object file simply means "no overrides" and the bridge stays inert.
-- `configFile` row field and `DSH_OBSIDIAN_BRIDGE_CONFIG` environment variable select another
+- `configFile` row field and `DSH_OBSIDIAN_FILE_OPENER_CONFIG` environment variable select another
   JSON config file.
 - `~/` expansion for every path field (`vaultRoot`, `diagFile`, `configFile`).
 - Config resolution is exported and unit-tested: `normalizeConfig(raw, fileValue)`,
   `buildConfig(row, file, configFile)`, `readConfigFile(file)`. Row values win over file values
   field by field, which is what makes a profile-level patch override possible.
-- `GET /obsidian-bridge/config` now also reports `configFile`, and `host-activate` in the
+- `GET /obsidian-file-opener/config` now also reports `configFile`, and `host-activate` in the
   diagnostic log records it.
 
 ### Changed
@@ -33,7 +61,7 @@ vault path moved out of the package into a user-level config file.
 
 ### Fixed
 
-- Source installs — `dsh plugin add github:Wang-Chuming/dsh-obsidian-bridge`, the Desktop plugin
+- Source installs — `dsh plugin add github:Wang-Chuming/dsh-obsidian-file-opener`, the Desktop plugin
   manager, and plugin markets that install from the repository — no longer fail on a missing
   `cordis.patch.yml`; the file the manifest points at is now in the repository.
 - The test suite is hermetic: it no longer reads the machine's real config file, and it now
@@ -46,8 +74,8 @@ the curated, de-personalised version of that code.
 
 ### Added
 
-- Host half (`index.js`): authenticated `GET /obsidian-bridge/config`,
-  `POST /obsidian-bridge/open`, `POST /obsidian-bridge/diag` routes, plus the
+- Host half (`index.js`): authenticated `GET /obsidian-file-opener/config`,
+  `POST /obsidian-file-opener/open`, `POST /obsidian-file-opener/diag` routes, plus the
   `open_in_obsidian` model tool that shares the same open operation.
 - Client half (`client.js`): wraps `ctx.sidebarRight.openResource` so a plain click on a
   vault file reference opens Obsidian, while Cmd/Ctrl-click keeps the in-app preview.
@@ -61,5 +89,6 @@ the curated, de-personalised version of that code.
 - Unit tests for config normalisation, path containment, URI encoding, and openers
   (`npm test`), plus GitHub Actions CI on Node 20/22/24.
 
-[0.2.0]: https://github.com/Wang-Chuming/dsh-obsidian-bridge/releases/tag/v0.2.0
-[0.1.0]: https://github.com/Wang-Chuming/dsh-obsidian-bridge/releases/tag/v0.1.0
+[0.3.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.3.0
+[0.2.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.2.0
+[0.1.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.1.0

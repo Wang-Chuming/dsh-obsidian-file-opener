@@ -1,6 +1,6 @@
-# dsh-obsidian-bridge
+# dsh-obsidian-file-opener
 
-**[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 的 Obsidian 通道**：
+**[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 的 Obsidian 文件打开器**：
 点击对话里引用的 Obsidian 库内文件（聊天气泡中的 Markdown 链接、工具行路径、行内文件提及、
 `@file` 引用、文件树里的库内文件），直接**在 Obsidian 中打开**，而不是在 Harness 内置预览里打开。
 
@@ -32,7 +32,7 @@ sequenceDiagram
 
     User->>Client: 普通点击库内文件引用
     Client->>Client: 600 ms 内的手势、非 Cmd/Ctrl、路径在 vaultRoot 内
-    Client->>Host: POST /obsidian-bridge/open { path, source }
+    Client->>Host: POST /obsidian-file-opener/open { path, source }
     Host->>Host: connection.requestRejection(req) —— 认证 + Origin 防护
     Host->>Host: realpath 校验路径确实在 vaultRoot 内
     Host->>OS: /usr/bin/open obsidian://open?…
@@ -55,9 +55,9 @@ sequenceDiagram
 
 | 路由 | 方法 | 作用 |
 | --- | --- | --- |
-| `/obsidian-bridge/config` | `GET` | 返回给 Client 半边的库配置（`vaultRoot`、`vaultName`、`extensions`、`testPath`、`selftest`、`configFile`、`ok`） |
-| `/obsidian-bridge/open` | `POST` | `{ path, source? }` → 打开库内一个文件；成功 `200`，失败 `422` 并带错误 |
-| `/obsidian-bridge/diag` | `POST` | 追加一行浏览器侧诊断 |
+| `/obsidian-file-opener/config` | `GET` | 返回给 Client 半边的库配置（`vaultRoot`、`vaultName`、`extensions`、`testPath`、`selftest`、`configFile`、`ok`） |
+| `/obsidian-file-opener/open` | `POST` | `{ path, source? }` → 打开库内一个文件；成功 `200`，失败 `422` 并带错误 |
+| `/obsidian-file-opener/diag` | `POST` | 追加一行浏览器侧诊断 |
 
 三条路由都先调用 `ctx.connection.requestRejection(req)`：复用 Harness 的 Host/Origin 防护
 （防 DNS rebinding、防跨站调用）和浏览器登录 cookie。如果该服务不存在，插件直接返回 **503**
@@ -68,7 +68,7 @@ sequenceDiagram
 Host 半边在启动时按下面的顺序解析一次配置：
 
 1. bundle 行的 `config:` 块（随包发布的 `cordis.patch.yml` 故意不带 config）；
-2. `~/.dsh/obsidian-bridge.config.json` —— 推荐把库路径放这里；
+2. `~/.dsh/obsidian-file-opener.config.json` —— 推荐把库路径放这里；
 3. 下表中的默认值。
 
 两处都没有 `vaultRoot` 时插件照常加载但保持**惰性**：config 路由返回 `ok: false`，
@@ -89,7 +89,7 @@ Client 半边对所有文件都保留内置预览。
 ### 1. 把插件装进 profile
 
 ```bash
-dsh plugin --profile <profile> add github:Wang-Chuming/dsh-obsidian-bridge
+dsh plugin --profile <profile> add github:Wang-Chuming/dsh-obsidian-file-opener
 ```
 
 `<profile>` 是 `desktop`、`web` 或 `headless`。该命令安装包，并因为包声明了 `dsh.bundle`
@@ -99,7 +99,7 @@ dsh plugin --profile <profile> add github:Wang-Chuming/dsh-obsidian-bridge
 ### 2. 指向你的库
 
 ```bash
-cat > ~/.dsh/obsidian-bridge.config.json <<'JSON'
+cat > ~/.dsh/obsidian-file-opener.config.json <<'JSON'
 {
   "vaultRoot": "/Users/you/Research/Research-Vault",
   "vaultName": "Research-Vault",
@@ -114,10 +114,10 @@ JSON
 ### 3. 重启并确认
 
 重启 Harness（只刷新页面不够：Host 半边在启动时读取配置、注册路由和模型工具）。首次加载页面后，
-`~/.dsh/obsidian-bridge.diag.jsonl` 里应出现类似记录：
+`~/.dsh/obsidian-file-opener.diag.jsonl` 里应出现类似记录：
 
 ```json
-{"event":"host-activate","vaultRoot":"/path/to/your/vault","extensions":[".md"],"selftest":true,"configFile":"/Users/you/.dsh/obsidian-bridge.config.json"}
+{"event":"host-activate","vaultRoot":"/path/to/your/vault","extensions":[".md"],"selftest":true,"configFile":"/Users/you/.dsh/obsidian-file-opener.config.json"}
 {"client":true,"wrapped":true,"hasSessions":true,"event":"client-activate"}
 {"client":true,"ok":true,"vaultRoot":"/path/to/your/vault","event":"client-config"}
 {"event":"selftest-trigger","path":"/path/to/your/vault/HOME.md"}
@@ -131,17 +131,17 @@ JSON
 要改插件本身时，链接本地 checkout 更方便：
 
 ```bash
-git clone https://github.com/Wang-Chuming/dsh-obsidian-bridge.git ~/dsh-obsidian-bridge
+git clone https://github.com/Wang-Chuming/dsh-obsidian-file-opener.git ~/dsh-obsidian-file-opener
 ```
 
-把 `"@dsh-external/dsh-obsidian-bridge": "link:/Users/you/dsh-obsidian-bridge"` 加进 profile 的
-`dependencies`，把 `@dsh-external/dsh-obsidian-bridge` 加进 `dsh.profile.bundles`，在
+把 `"@dsh-external/dsh-obsidian-file-opener": "link:/Users/you/dsh-obsidian-file-opener"` 加进 profile 的
+`dependencies`，把 `@dsh-external/dsh-obsidian-file-opener` 加进 `dsh.profile.bundles`，在
 `~/.dsh/profiles/<profile>` 里 `pnpm install`，然后重启。`cordis.patch.yml` 里的行 `name`
 必须与依赖名一致。
 
 ## 配置
 
-推荐写在 `~/.dsh/obsidian-bridge.config.json`。
+推荐写在 `~/.dsh/obsidian-file-opener.config.json`。
 
 | 字段 | 默认 | 含义 |
 | --- | --- | --- |
@@ -150,8 +150,8 @@ git clone https://github.com/Wang-Chuming/dsh-obsidian-bridge.git ~/dsh-obsidian
 | `extensions` | `['.md']` | 哪些库内文件从内置预览里被接管。空数组 ⇒ 库内全部文件。 |
 | `testPath` | `HOME.md` | 首次加载自检的目标文件，相对 `vaultRoot`。 |
 | `selftest` | `true` | 每个浏览器跑一次端到端自检（会打开一次 Obsidian）。 |
-| `diagFile` | `~/.dsh/obsidian-bridge.diag.jsonl` | JSONL 诊断日志路径。 |
-| `configFile` | `~/.dsh/obsidian-bridge.config.json` | JSON 配置读取位置；也可用环境变量 `DSH_OBSIDIAN_BRIDGE_CONFIG` 指定。 |
+| `diagFile` | `~/.dsh/obsidian-file-opener.diag.jsonl` | JSONL 诊断日志路径。 |
+| `configFile` | `~/.dsh/obsidian-file-opener.config.json` | JSON 配置读取位置；也可用环境变量 `DSH_OBSIDIAN_FILE_OPENER_CONFIG` 指定。 |
 
 bundle 行自己的 `config:` 块按字段覆盖 JSON 文件；随包发布的 `cordis.patch.yml` 故意不带
 `config:`，这样插件升级永远不会碰你的设置。`cordis.patch.example.yml` 记录内联写法，
