@@ -27,3 +27,9 @@
         selftest: true
         # Optional — JSONL diagnostic log (default ~/.dsh/obsidian-file-opener.diag.jsonl).
         # diagFile: '~/.dsh/obsidian-file-opener.diag.jsonl'
+        # Optional — route other vault file types to another app instead of Obsidian.
+        # Rules win over `extensions`; a relative `root` is resolved against `vaultRoot`.
+        # openers:
+        #   - app: vscode
+        #     extensions: ['.tex']
+        #     root: physics/lshape-pt-symmetry/paper/manuscript

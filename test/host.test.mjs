@@ -11,7 +11,10 @@ import {
 	readConfigFile,
 	resolveVaultFile,
 	obsidianUri,
-	openerFor
+	openerFor,
+	pickOpener,
+	vscodeArgs,
+	vscodeCandidates
 } from "../index.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -197,4 +200,72 @@ test("cleanup of temporary vaults", () => {
 	// no repository state is touched by the suite.
 	const { base } = makeVault();
 	rmSync(base, { recursive: true, force: true });
+});
+
+test("buildConfig validates opener rules and resolves their roots", () => {
+	const file = {
+		vaultRoot: "/vault",
+		openers: [
+			{ app: "vscode", extensions: [".TEX", ".bib"], root: "physics/paper/manuscript" },
+			{ app: "vscode", extensions: [".tex"], root: "~/papers" },
+			{ app: "photoshop", extensions: [".psd"] },
+			{ app: "vscode", extensions: [] },
+			"nonsense"
+		]
+	};
+	const config = buildConfig({}, file, "/tmp/c.json");
+	assert.equal(config.openers.length, 2);
+	assert.deepEqual(config.openers[0], {
+		app: "vscode",
+		extensions: [".tex", ".bib"],
+		root: path.resolve("/vault", "physics/paper/manuscript")
+	});
+	assert.deepEqual(config.openers[1], { app: "vscode", extensions: [".tex"], root: path.join(homedir(), "papers") });
+	assert.deepEqual(buildConfig({}, { openers: "nope" }, "/tmp/c.json").openers, []);
+});
+
+test("pickOpener prefers opener rules, then the note extensions, then gives up", () => {
+	const config = buildConfig({}, {
+		vaultRoot: "/vault",
+		extensions: [".md"],
+		openers: [{ app: "vscode", extensions: [".tex"], root: "papers" }]
+	}, "/tmp/c.json");
+	assert.equal(pickOpener(config, "physics/lshape-pt-symmetry/paper/manuscript/main.tex").app, "vscode");
+	assert.equal(pickOpener(config, "notes/Home.md").app, "obsidian");
+	assert.equal(pickOpener(config, "figures/plot.pdf"), undefined);
+
+	// An opener rule beats the note list: `.md` can be routed to VS Code too.
+	const overridden = buildConfig({}, {
+		vaultRoot: "/vault",
+		extensions: [".md"],
+		openers: [{ app: "vscode", extensions: [".md"] }]
+	}, "/tmp/c.json");
+	assert.equal(pickOpener(overridden, "notes/Home.md").app, "vscode");
+
+	// Empty extensions means "every vault file goes to Obsidian", as before.
+	const everything = buildConfig({}, { vaultRoot: "/vault", extensions: [] }, "/tmp/c.json");
+	assert.equal(pickOpener(everything, "figures/plot.pdf").app, "obsidian");
+});
+
+test("vscodeArgs opens the rule root as workspace when the file lives inside it", () => {
+	const file = { rel: "physics/paper/manuscript/main.tex", abs: "/vault/physics/paper/manuscript/main.tex" };
+	assert.deepEqual(
+		vscodeArgs({ app: "vscode", extensions: [".tex"], root: "/vault/physics/paper/manuscript" }, file),
+		["/vault/physics/paper/manuscript", "/vault/physics/paper/manuscript/main.tex"]
+	);
+	assert.deepEqual(
+		vscodeArgs({ app: "vscode", extensions: [".tex"], root: "/vault/other" }, file),
+		["/vault/physics/paper/manuscript/main.tex"]
+	);
+	assert.deepEqual(
+		vscodeArgs({ app: "vscode", extensions: [".tex"], root: "" }, file),
+		["/vault/physics/paper/manuscript/main.tex"]
+	);
+});
+
+test("vscodeCandidates looks inside the macOS app bundle and falls back to PATH", () => {
+	assert.equal(vscodeCandidates("darwin")[0], "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code");
+	assert.equal(vscodeCandidates("darwin").includes("code"), true);
+	assert.deepEqual(vscodeCandidates("win32").slice(0, 2), ["code.cmd", "code"]);
+	assert.equal(vscodeCandidates("linux")[0], "code");
 });

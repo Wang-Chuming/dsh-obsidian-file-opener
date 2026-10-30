@@ -115,11 +115,16 @@ window.__ModuleLoader__.load({
 			const root = current.vaultRoot.replace(/\/+$/, "");
 			const normalized = absolute.replace(/\\/g, "/");
 			if (normalized !== root && !normalized.startsWith(`${root}/`)) return false;
+			const lower = normalized.toLowerCase();
+			// Explicit opener rules (e.g. `.tex` -> VS Code) win over the note extensions.
+			const openers = Array.isArray(current.openers) ? current.openers : [];
+			const matchedRule = openers.some((rule) => rule !== null && typeof rule === "object" && Array.isArray(rule.extensions)
+				&& rule.extensions.some((entry) => typeof entry === "string" && lower.endsWith(entry.toLowerCase())));
+			if (matchedRule) return true;
 			const extensions = Array.isArray(current.extensions)
 				? current.extensions.filter((entry) => typeof entry === "string" && entry.startsWith("."))
 				: [];
 			if (extensions.length === 0) return true;
-			const lower = normalized.toLowerCase();
 			return extensions.some((entry) => lower.endsWith(entry.toLowerCase()));
 		}
 

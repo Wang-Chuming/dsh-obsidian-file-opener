@@ -1,8 +1,9 @@
 # dsh-obsidian-file-opener
 
-**[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 的 Obsidian 文件打开器**：
+**[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI 的库内文件打开器**：
 点击对话里引用的 Obsidian 库内文件（聊天气泡中的 Markdown 链接、工具行路径、行内文件提及、
-`@file` 引用、文件树里的库内文件），直接**在 Obsidian 中打开**，而不是在 Harness 内置预览里打开。
+`@file` 引用、文件树里的库内文件），会按文件类型打开到对应 App：**笔记进 Obsidian**，
+配置过的类型（例如 `.tex`）**进 VS Code**，而不是在 Harness 内置预览里打开。
 
 > English: [README.md](README.md)
 
@@ -15,9 +16,10 @@ Harness 自带的预览本身很好用，但当你的笔记就是一个 Obsidian
 | 手势 | 结果 |
 | --- | --- |
 | **普通点击**库内文件引用 | 通过 `obsidian://open` 在 Obsidian 打开，Obsidian 切到前台 |
+| 命中 `openers` 规则的库内文件（例如 `.tex`） | 在该规则指定的 App 打开；VS Code 会把规则的 `root` 目录作为工作区一起打开，LaTeX Workshop 因此能识别到真正的项目 |
 | **Cmd/Ctrl + 点击** | Harness 内置文档预览（保持原样） |
 | 库外文件、`extensions` 之外的后缀、程序化/恢复时的打开 | Harness 内置文档预览（保持原样） |
-| 「帮我打开这条笔记」 | 模型工具 `open_in_obsidian`，与点击走同一个打开操作 |
+| 「帮我打开这个文件」 | 模型工具 `open_vault_file`，与点击走同一套路由 |
 
 ## 工作原理
 
@@ -44,9 +46,10 @@ sequenceDiagram
 同一个包里有两个半边：
 
 - **Host 半边 `index.js`**：在 Harness web server 上注册三条需要认证的路由，外加
-  `open_in_obsidian` 模型工具。所有打开都走同一个函数：先把请求路径解析到 `vaultRoot`
-  内（`realpath` + `path.relative`，因此 `..` 和指向库外的符号链接会被拒绝），再构造
-  `obsidian://` URI，最后用参数数组（绝不经过 shell 字符串）调用平台 opener。
+  `open_vault_file` 模型工具。所有打开都走同一个函数：先把请求路径解析到 `vaultRoot`
+  内（`realpath` + `path.relative`，因此 `..` 和指向库外的符号链接会被拒绝），再选 opener
+  （`openers` 规则优先，其次笔记后缀），最后用参数数组（绝不经过 shell 字符串）启动：
+  Obsidian 走 `obsidian://` URI，VS Code 走它的 `code` CLI。
 - **Client 半边 `client.js`**：包装 `ctx.sidebarRight.openResource` —— Web GUI 里所有文件
   打开路径唯一的导航入口。普通点击库内文件时改走 Host 路由；Cmd/Ctrl+点击以及一切非库内
   命中都落回原控制器。每个浏览器首次加载时跑一次端到端自检，把结果写入 JSONL 诊断日志。
@@ -103,13 +106,20 @@ cat > ~/.dsh/obsidian-file-opener.config.json <<'JSON'
 {
   "vaultRoot": "/Users/you/Research/Research-Vault",
   "vaultName": "Research-Vault",
-  "extensions": [".md", ".canvas", ".base"]
+  "extensions": [".md", ".canvas", ".base"],
+  "openers": [
+    {
+      "app": "vscode",
+      "extensions": [".tex"],
+      "root": "physics/lshape-pt-symmetry/paper/manuscript"
+    }
+  ]
 }
 JSON
 ```
 
-唯一必填的是 `vaultRoot`；所有路径里的 `~` 会被展开。文件不存在或格式错误只表示「没有覆盖」，
-插件会保持惰性，不会乱猜。
+唯一必填的是 `vaultRoot`；所有路径里的 `~` 会被展开，相对的 `openers[].root` 按 `vaultRoot`
+解析。文件不存在或格式错误只表示「没有覆盖」，插件会保持惰性，不会乱猜。
 
 ### 3. 重启并确认
 
@@ -152,6 +162,7 @@ git clone https://github.com/Wang-Chuming/dsh-obsidian-file-opener.git ~/dsh-obs
 | `selftest` | `true` | 每个浏览器跑一次端到端自检（会打开一次 Obsidian）。 |
 | `diagFile` | `~/.dsh/obsidian-file-opener.diag.jsonl` | JSONL 诊断日志路径。 |
 | `configFile` | `~/.dsh/obsidian-file-opener.config.json` | JSON 配置读取位置；也可用环境变量 `DSH_OBSIDIAN_FILE_OPENER_CONFIG` 指定。 |
+| `openers` | `[]` | 让某些库内文件既不进 Obsidian 也不进内置预览：`{ app, extensions, root? }`。`app` 目前只支持 `vscode`；`root`（可选）是被点击文件位于其中时一起打开的工作区目录。规则优先于 `extensions`。 |
 
 bundle 行自己的 `config:` 块按字段覆盖 JSON 文件；随包发布的 `cordis.patch.yml` 故意不带
 `config:`，这样插件升级永远不会碰你的设置。`cordis.patch.example.yml` 记录内联写法，
@@ -166,6 +177,9 @@ bundle 行自己的 `config:` 块按字段覆盖 JSON 文件；随包发布的 `
 - **诊断日志会记录库内路径**，但只写到 `~/.dsh/`，不进库、不进仓库。不想留可删除该文件、
   改 `diagFile`，或设 `selftest: false`。
 - 配置文件只当数据读：不 `require`、不 eval、不联网。
+- `openers[].app` 只接受固定的启动器集合（目前只有 `vscode`），不是命令字符串，
+  所以配置无法变成任意命令执行。VS Code 通过 `code` CLI 启动：先找 macOS app 包内那份，
+  再找 `/usr/local/bin`、`/opt/homebrew/bin`，最后 `PATH`。
 
 ## 已知限制
 
@@ -174,6 +188,8 @@ bundle 行自己的 `config:` 块按字段覆盖 JSON 文件；随包发布的 `
 - 只能打开**库内**文件：Obsidian 的 URI scheme 无法打开库外文件。
 - 只接管**用户手势**触发的打开（点击后 600 ms 内）。程序化打开（会话恢复、其他插件调用
   `openResource`）保持内置预览，避免刷新页面时弹出一堆 Obsidian 窗口。
+- `openers` 里 `app: "vscode"` 需要本机安装 VS Code；macOS 会自动用 app 包内的 CLI，
+  其他平台请安装 `code` 命令。找不到时打开失败，点击回退到内置预览。
 - 通过 GitHub 分发。`@dsh-external` 是作者的本地插件命名空间，**不发布到 npm**，
   `package.json` 的 `private` 字段也保证这一点。
 
@@ -186,7 +202,7 @@ npm test        # node --test：配置优先级、路径限制、URI 编码、�
 
 | 路径 | 作用 |
 | --- | --- |
-| `index.js` | Host 半边：路由、`open_in_obsidian` 工具、配置解析、路径校验、平台 opener |
+| `index.js` | Host 半边：路由、`open_vault_file` 工具、配置解析、路径校验、`openers` 路由、平台 opener |
 | `client.js` | Client 半边：包装 `openResource`、手势门控、自检 |
 | `locale/{en,zh}.json` | 插件管理器里的标题与描述 |
 | `icon.svg` | 插件图标 |

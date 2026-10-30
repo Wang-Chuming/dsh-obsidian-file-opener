@@ -4,9 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
 
-An **Obsidian file opener for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI**:
+A **vault file opener for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web GUI**:
 click a file that lives in your Obsidian vault — in the conversation, in a tool output, in a
-file mention, in the file tree — and it opens **in Obsidian**, not in the in-app preview.
+file mention, in the file tree — and it opens in the app that file belongs to: **notes in
+Obsidian**, other configured types (for example `.tex`) **in VS Code**, never in the in-app
+preview.
 
 > 中文说明见 [README.zh-CN.md](README.zh-CN.md)。
 
@@ -21,9 +23,10 @@ exactly as the Harness shipped it.
 | Gesture | Result |
 | --- | --- |
 | **Plain click** on a vault file reference (Markdown file links in the conversation, tool-row paths, inline file mentions, `@file` references, vault files in the file tree) | Opens in Obsidian via `obsidian://open`, Obsidian comes to the front |
+| A vault file matching an `openers` rule — e.g. `.tex` | Opens in that app; for VS Code the rule's `root` folder is opened as the workspace, so LaTeX Workshop sees the real project |
 | **Cmd/Ctrl + click** | The Harness in-app document preview (unchanged) |
 | Files outside `vaultRoot`, extensions not in `extensions`, programmatic or restore-time opens | The Harness in-app document preview (unchanged) |
-| “Open this note for me” | The `open_in_obsidian` model tool, same operation as a click |
+| “Open this file for me” | The `open_vault_file` model tool, same routing as a click |
 
 ## How it works
 
@@ -50,10 +53,11 @@ sequenceDiagram
 Two halves, one package:
 
 - **Host half — `index.js`.** Registers three authenticated routes on the Harness web server
-  and the `open_in_obsidian` model tool. Every open goes through one function: resolve the
+  and the `open_vault_file` model tool. Every open goes through one function: resolve the
   requested path inside `vaultRoot` (`realpath` + `path.relative`, so `..` and symlinks that
-  leave the vault are refused), build an `obsidian://` URI, launch the platform opener with
-  an argument vector (never a shell string).
+  leave the vault are refused), pick the opener (`openers` rules first, then the note
+  extensions), and launch it — an `obsidian://` URI through the platform opener, or VS Code
+  through its `code` CLI — always with an argument vector, never a shell string.
 - **Client half — `client.js`.** Wraps `ctx.sidebarRight.openResource`, the single navigation
   controller every file-open path in the Web GUI goes through. A plain click on a vault file
   is redirected to the host route; Cmd/Ctrl-click and everything that is not a vault hit fall
@@ -114,13 +118,21 @@ cat > ~/.dsh/obsidian-file-opener.config.json <<'JSON'
 {
   "vaultRoot": "/Users/you/Research/Research-Vault",
   "vaultName": "Research-Vault",
-  "extensions": [".md", ".canvas", ".base"]
+  "extensions": [".md", ".canvas", ".base"],
+  "openers": [
+    {
+      "app": "vscode",
+      "extensions": [".tex"],
+      "root": "physics/lshape-pt-symmetry/paper/manuscript"
+    }
+  ]
 }
 JSON
 ```
 
-`vaultRoot` is the only required field; `~` is expanded in every path. A missing or malformed
-file simply means “no overrides” — the plugin then stays inert instead of guessing.
+`vaultRoot` is the only required field; `~` is expanded in every path, and a relative
+`openers[].root` is resolved against `vaultRoot`. A missing or malformed file simply means
+“no overrides” — the plugin then stays inert instead of guessing.
 
 ### 3. Restart and confirm the channel
 
@@ -165,6 +177,7 @@ Recommended: `~/.dsh/obsidian-file-opener.config.json`.
 | `selftest` | `true` | Run the end-to-end self-test once per browser (it opens Obsidian once). |
 | `diagFile` | `~/.dsh/obsidian-file-opener.diag.jsonl` | JSONL diagnostic log. |
 | `configFile` | `~/.dsh/obsidian-file-opener.config.json` | Where the JSON config is read from. Can also be set with the `DSH_OBSIDIAN_FILE_OPENER_CONFIG` environment variable. |
+| `openers` | `[]` | Rules that take a vault file away from both Obsidian and the preview: `{ app, extensions, root? }`. `app` is currently `vscode`; `root` (optional) is the folder opened as the workspace when the clicked file lives inside it. Rules win over `extensions`. |
 
 The bundle row's own `config:` block wins over the JSON file field by field; the packaged
 `cordis.patch.yml` ships without `config:` on purpose, so plugin updates never touch your
@@ -184,6 +197,10 @@ settings. `cordis.patch.example.yml` documents the inline form, and the header o
   repository. Delete the file, point `diagFile` elsewhere, or set `selftest: false` if you do
   not want it.
 - The config file is read as data only — no `require`, no evaluation, no network access.
+- `openers[].app` accepts a fixed set of launchers (currently only `vscode`), never a command
+  string: the config cannot turn into arbitrary command execution. VS Code is started through
+  its `code` CLI — the one inside the macOS app bundle, then `/usr/local/bin`, `/opt/homebrew/bin`,
+  then `PATH`.
 
 ## Limitations
 
@@ -195,6 +212,9 @@ settings. `cordis.patch.example.yml` documents the inline form, and the header o
 - Only **user gestures** are redirected: an open within 600 ms of a click. Programmatic opens
   (session restore, other plugins calling `openResource`) keep the in-app preview so reloading
   the page never sprays Obsidian windows.
+- `openers` with `app: "vscode"` need VS Code installed; on macOS the CLI inside the app bundle
+  is used automatically, elsewhere install the `code` shell command. If it is missing the open
+  fails and the click falls back to the in-app preview.
 - The package is distributed through GitHub. The `@dsh-external` name is the author's local
   plugin namespace — this package is **not** published to npm, and the `private` flag keeps it
   that way.
@@ -208,7 +228,7 @@ npm test        # node --test: config precedence, path containment, URI encoding
 
 | Path | Role |
 | --- | --- |
-| `index.js` | Host half: routes, `open_in_obsidian` tool, config resolution, containment, opener |
+| `index.js` | Host half: routes, `open_vault_file` tool, config resolution, containment, `openers` routing, opener |
 | `client.js` | Client half: wraps `openResource`, gesture gating, self-test |
 | `locale/{en,zh}.json` | Plugin Manager title/description |
 | `icon.svg` | Plugin icon |

@@ -4,7 +4,7 @@
 //   1. GET  /obsidian-file-opener/config  (authenticated) -> the vault bridge config the Web client reads;
 //   2. POST /obsidian-file-opener/open    (authenticated) -> open one vault file in the Obsidian app;
 //   3. POST /obsidian-file-opener/diag    (authenticated) -> append one diagnostic JSON line.
-// and the model tool `open_in_obsidian`, which performs the same open operation
+// and the model tool `open_vault_file`, which performs the same open operation
 // when a user asks the agent to jump to a note.
 //
 // The Web client half (client.js) wraps `ctx.sidebarRight.openResource`: a normal
@@ -24,6 +24,8 @@ const DEFAULT_EXTENSIONS = [".md"];
 const DEFAULT_DIAG_FILE = path.join(homedir(), ".dsh", "obsidian-file-opener.diag.jsonl");
 const DEFAULT_CONFIG_FILE = path.join(homedir(), ".dsh", "obsidian-file-opener.config.json");
 const CONFIG_FILE_ENV = "DSH_OBSIDIAN_FILE_OPENER_CONFIG";
+/** Apps a configured opener rule may launch. Everything else stays on the Obsidian path. */
+const SUPPORTED_APPS = new Set(["vscode"]);
 
 /** A plain object, or an empty one for anything else. */
 function asRecord(value) {
@@ -68,6 +70,31 @@ function pickField(row, file, key, fallback) {
 	return fallback;
 }
 
+/**
+ * Validate the `openers` rule list: each rule needs at least one extension and a supported
+ * app. `root` is optional and means "open the app with this folder as the workspace"; a
+ * relative root is resolved against the vault root, so `"physics/…/manuscript"` works.
+ */
+function buildOpeners(rawOpeners, vaultRoot) {
+	if (!Array.isArray(rawOpeners)) return [];
+	const rules = [];
+	for (const rawRule of rawOpeners) {
+		const rule = asRecord(rawRule);
+		const extensions = Array.isArray(rule.extensions)
+			? rule.extensions
+				.filter((extension) => typeof extension === "string" && extension.startsWith("."))
+				.map((extension) => extension.toLowerCase())
+			: [];
+		const app = typeof rule.app === "string" ? rule.app.trim().toLowerCase() : "";
+		if (extensions.length === 0 || !SUPPORTED_APPS.has(app)) continue;
+		const root = typeof rule.root === "string" && rule.root.trim() !== ""
+			? path.resolve(vaultRoot === "" ? process.cwd() : vaultRoot, expandHome(rule.root))
+			: "";
+		rules.push({ app, extensions, root });
+	}
+	return rules;
+}
+
 /** Build the effective config from an already-read bundle row and config-file body. */
 function buildConfig(rawRow, rawFile, configFile) {
 	const row = asRecord(rawRow);
@@ -75,14 +102,16 @@ function buildConfig(rawRow, rawFile, configFile) {
 	const vaultName = pickField(row, file, "vaultName", "");
 	const extensions = pickField(row, file, "extensions", DEFAULT_EXTENSIONS);
 	const testPath = pickField(row, file, "testPath", "HOME.md");
+	const vaultRoot = resolvePath(pickField(row, file, "vaultRoot", ""), "");
 	return {
-		vaultRoot: resolvePath(pickField(row, file, "vaultRoot", ""), ""),
+		vaultRoot,
 		vaultName: typeof vaultName === "string" ? vaultName : "",
 		extensions: Array.isArray(extensions)
 			? extensions
 				.filter((entry) => typeof entry === "string" && entry.startsWith("."))
 				.map((entry) => entry.toLowerCase())
 			: DEFAULT_EXTENSIONS,
+		openers: buildOpeners(pickField(row, file, "openers", []), vaultRoot),
 		testPath: typeof testPath === "string" && testPath !== "" ? testPath : "HOME.md",
 		diagFile: resolvePath(pickField(row, file, "diagFile", DEFAULT_DIAG_FILE), DEFAULT_DIAG_FILE),
 		selftest: pickField(row, file, "selftest", true) !== false,
@@ -207,13 +236,12 @@ function openerFor() {
 	return { command: "xdg-open", args: (target) => [target] };
 }
 
-/** Launch one URI and report an early failure; a launcher still running when the window closes counts as launched. */
-function launchObsidian(uri) {
+/** Run one program with an argument vector; ENOENT is reported as `missing` so callers can try the next candidate. */
+function runDetached(command, args) {
 	return new Promise((resolve) => {
-		const opener = openerFor();
 		let child;
 		try {
-			child = spawn(opener.command, opener.args(uri), { detached: true, stdio: "ignore" });
+			child = spawn(command, args, { detached: true, stdio: "ignore" });
 		} catch (error) {
 			resolve({ ok: false, error: error instanceof Error ? error.message : String(error) });
 			return;
@@ -228,7 +256,7 @@ function launchObsidian(uri) {
 		timer.unref?.();
 		child.once("error", (error) => {
 			clearTimeout(timer);
-			finish({ ok: false, error: error.message });
+			finish(error.code === "ENOENT" ? { ok: false, missing: true, error: `command not found: ${command}` } : { ok: false, error: error.message });
 		});
 		child.once("exit", (code, signal) => {
 			clearTimeout(timer);
@@ -239,26 +267,93 @@ function launchObsidian(uri) {
 	});
 }
 
+/** Launch one URI and report an early failure; a launcher still running when the window closes counts as launched. */
+function launchObsidian(uri) {
+	const opener = openerFor();
+	return runDetached(opener.command, opener.args(uri));
+}
+
+/** Candidate `code` executables, most specific first (macOS ships one inside the app bundle). */
+function vscodeCandidates(platform = process.platform) {
+	if (platform === "darwin") {
+		return [
+			"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+			"/usr/local/bin/code",
+			"/opt/homebrew/bin/code",
+			"code"
+		];
+	}
+	if (platform === "win32") return ["code.cmd", "code"];
+	return ["code", "/usr/bin/code", "/usr/local/bin/code", "/snap/bin/code"];
+}
+
+/** `code <root> <file>` when the file is inside the rule's root, `code <file>` otherwise. */
+function vscodeArgs(rule, file) {
+	const args = [];
+	const root = rule.root;
+	if (root !== "" && (file.abs === root || file.abs.startsWith(`${root}${path.sep}`))) args.push(root);
+	args.push(file.abs);
+	return args;
+}
+
+/** Open one resolved vault file in VS Code, trying the known `code` locations before giving up. */
+async function launchVscode(rule, file) {
+	const args = vscodeArgs(rule, file);
+	for (const command of vscodeCandidates()) {
+		const result = await runDetached(command, args);
+		if (result.ok || result.missing !== true) return result;
+	}
+	return {
+		ok: false,
+		error: "VS Code command not found (macOS: /Applications/Visual Studio Code.app/…/bin/code; install the `code` shell command for other platforms)"
+	};
+}
+
+/**
+ * Which opener owns one resolved vault file: an explicit `openers` rule first (so `.tex` can
+ * go to VS Code), then the Obsidian extension list (empty list = every vault file).
+ * `undefined` means "no configured opener", i.e. keep the shipped in-app preview.
+ */
+function pickOpener(config, fileRel) {
+	const lower = fileRel.toLowerCase();
+	for (const rule of config.openers) {
+		if (rule.extensions.some((extension) => lower.endsWith(extension))) return rule;
+	}
+	const ownsEverything = config.extensions.length === 0;
+	if (ownsEverything || config.extensions.some((extension) => lower.endsWith(extension))) return { app: "obsidian" };
+	return undefined;
+}
+
 /** The one open operation shared by the Web route and the model tool. */
-async function openInObsidian(config, requested, source) {
+async function openVaultFile(config, requested, source) {
 	const resolved = resolveVaultFile(config, requested);
 	if (!resolved.ok) {
 		writeDiag(config, { event: "open-rejected", source, path: requested, error: resolved.error });
 		return { ok: false, error: resolved.error };
 	}
-	const uri = obsidianUri(config, resolved);
-	const launched = await launchObsidian(uri);
+	const opener = pickOpener(config, resolved.rel);
+	if (opener === undefined) {
+		const error = `no opener configured for ${resolved.rel} (add it to \`extensions\` or an \`openers\` rule)`;
+		writeDiag(config, { event: "open-rejected", source, path: resolved.abs, error });
+		return { ok: false, error };
+	}
+	const launched = opener.app === "vscode"
+		? await launchVscode(opener, resolved)
+		: await launchObsidian(obsidianUri(config, resolved));
 	writeDiag(config, {
 		event: "open",
 		source,
+		app: opener.app,
 		path: resolved.abs,
 		file: resolved.rel,
 		ok: launched.ok,
 		...(launched.error === undefined ? {} : { error: launched.error })
 	});
-	return launched.ok
-		? { ok: true, file: resolved.rel, uri }
-		: { ok: false, error: launched.error };
+	if (!launched.ok) return { ok: false, app: opener.app, error: launched.error };
+	const payload = { ok: true, app: opener.app, file: resolved.rel };
+	if (opener.app === "obsidian") payload.uri = obsidianUri(config, resolved);
+	else if (opener.root !== "") payload.root = opener.root;
+	return payload;
 }
 
 /** Register the routes and the model tool. */
@@ -269,6 +364,7 @@ function apply(ctx, rawConfig) {
 		vaultRoot: config.vaultRoot,
 		vaultName: config.vaultName,
 		extensions: config.extensions,
+		openers: config.openers.map((rule) => ({ app: rule.app, extensions: rule.extensions, root: rule.root })),
 		selftest: config.selftest,
 		configFile: config.configFile
 	});
@@ -297,6 +393,7 @@ function apply(ctx, rawConfig) {
 			vaultRoot: config.vaultRoot,
 			vaultName: config.vaultName,
 			extensions: config.extensions,
+			openers: config.openers.map((rule) => ({ app: rule.app, extensions: rule.extensions })),
 			selftest: config.selftest,
 			testPath: config.testPath,
 			configFile: config.configFile
@@ -332,7 +429,7 @@ function apply(ctx, rawConfig) {
 			return;
 		}
 		const source = typeof body.value.source === "string" ? body.value.source.slice(0, 80) : "web";
-		const result = await openInObsidian(config, body.value.path, source);
+		const result = await openVaultFile(config, body.value.path, source);
 		sendJson(res, result.ok ? 200 : 422, result);
 	};
 
@@ -374,8 +471,8 @@ function apply(ctx, rawConfig) {
 			const tools = toolsCtx.get("tools");
 			if (tools === undefined || typeof tools.register !== "function") return;
 			toolsCtx.effect(() => tools.register({
-				name: "open_in_obsidian",
-				description: "Open a file from the user's Obsidian vault in the Obsidian app and bring Obsidian to the front. Use this when the user asks to see, jump to, or open a note that lives in their Obsidian vault. `path` may be absolute or relative to the vault root.",
+				name: "open_vault_file",
+				description: "Open a file from the user's Obsidian vault in the app configured for it: notes open in the Obsidian app, other configured types (for example `.tex`) open in VS Code with their project folder. Use this when the user asks to see, jump to, or open a file that lives in their vault. `path` may be absolute or relative to the vault root.",
 				parameters: {
 					type: "object",
 					properties: {
@@ -392,11 +489,11 @@ function apply(ctx, rawConfig) {
 					render: (_args, value) => [{ type: "text", text: String(value) }]
 				},
 				async execute(args) {
-					const result = await openInObsidian(config, args !== null && typeof args === "object" ? args.path : "", "tool");
+					const result = await openVaultFile(config, args !== null && typeof args === "object" ? args.path : "", "tool");
 					if (!result.ok) throw new Error(result.error);
-					return `Opened ${result.file} in Obsidian.`;
+					return `Opened ${result.file} in ${result.app === "vscode" ? "VS Code" : "Obsidian"}.`;
 				}
-			}), "obsidian-file-opener: open_in_obsidian tool");
+			}), "obsidian-file-opener: open_vault_file tool");
 		});
 	} catch (error) {
 		writeDiag(config, { event: "host-error", error: `tool registration failed: ${error instanceof Error ? error.message : String(error)}` });
@@ -411,4 +508,4 @@ export default {
 
 // Internal helpers, re-exported so the test suite can exercise them without a running Harness.
 // They are not part of the plugin's stable public surface.
-export { normalizeConfig, buildConfig, readConfigFile, resolveVaultFile, obsidianUri, openerFor };
+export { normalizeConfig, buildConfig, readConfigFile, resolveVaultFile, obsidianUri, openerFor, pickOpener, vscodeArgs, vscodeCandidates };

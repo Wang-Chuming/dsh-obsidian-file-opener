@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-10-30
+
+Adds per-file-type routing: vault files can now open in a configured app instead of Obsidian or
+the in-app preview. First supported app: VS Code.
+
+### Added
+
+- `openers` config rules — `{ app, extensions, root? }`. A rule wins over `extensions`, so `.tex`
+  can go to VS Code while notes stay in Obsidian. When `root` is set and the clicked file lives
+  inside it, the folder is opened as the VS Code workspace too, so LaTeX Workshop resolves the
+  real project.
+- `app` accepts only a fixed launcher set (currently `vscode`) — the config cannot turn into
+  arbitrary command execution. VS Code is started through its `code` CLI (macOS app bundle
+  first, then `/usr/local/bin`, `/opt/homebrew/bin`, then `PATH`).
+- `open_vault_file` model tool (renamed from `open_in_obsidian`) now follows the same routing and
+  names the app it used in its reply.
+- `GET /obsidian-file-opener/config` also reports the `openers` rules, so the client can decide
+  which clicks to take away from the in-app preview.
+- Tests for opener validation, routing precedence, VS Code argument building and platform
+  candidate lookup (21 tests).
+
+### Changed
+
+- The client gate redirects a vault file when it matches an `openers` rule or the note
+  `extensions`; everything else keeps the in-app preview.
+
 ## [0.3.0] - 2026-10-30
 
 Renamed from `dsh-obsidian-bridge` to `dsh-obsidian-file-opener`. The old name read like the
@@ -89,6 +115,7 @@ the curated, de-personalised version of that code.
 - Unit tests for config normalisation, path containment, URI encoding, and openers
   (`npm test`), plus GitHub Actions CI on Node 20/22/24.
 
+[0.4.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.1.0
