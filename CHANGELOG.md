@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-10-30
+
+### Fixed
+
+- **VS Code now comes to the front.** `code <root> <file>` did open the workspace, but a launch
+  from the Harness (a background Electron process) is not activated by macOS, so the window
+  stayed behind the Web GUI. After a successful launch the plugin now runs
+  `open -b com.microsoft.VSCode` (macOS only) to raise the app.
+- The spawned `code` no longer inherits the Harness's `ELECTRON_RUN_AS_NODE` /
+  `ELECTRON_NO_ATTACH_CONSOLE`, so a cold start opens the GUI instead of a headless Node process.
+- New tests for the activation arguments and the environment sanitiser.
+
 ## [0.4.0] - 2026-10-30
 
 Adds per-file-type routing: vault files can now open in a configured app instead of Obsidian or
@@ -115,6 +127,7 @@ the curated, de-personalised version of that code.
 - Unit tests for config normalisation, path containment, URI encoding, and openers
   (`npm test`), plus GitHub Actions CI on Node 20/22/24.
 
+[0.4.1]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.4.1
 [0.4.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Wang-Chuming/dsh-obsidian-file-opener/releases/tag/v0.2.0

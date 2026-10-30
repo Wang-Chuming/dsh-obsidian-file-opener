@@ -1,6 +1,6 @@
 {
   "name": "@dsh-external/dsh-obsidian-file-opener",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "One-click file opener for DeepSeek Harness: clicking a vault file reference opens notes in the Obsidian app and configured types (for example .tex) in VS Code with their project folder, instead of the in-app preview.",
   "license": "MIT",

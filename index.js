@@ -237,11 +237,11 @@ function openerFor() {
 }
 
 /** Run one program with an argument vector; ENOENT is reported as `missing` so callers can try the next candidate. */
-function runDetached(command, args) {
+function runDetached(command, args, env) {
 	return new Promise((resolve) => {
 		let child;
 		try {
-			child = spawn(command, args, { detached: true, stdio: "ignore" });
+			child = spawn(command, args, { detached: true, stdio: "ignore", ...(env === undefined ? {} : { env }) });
 		} catch (error) {
 			resolve({ ok: false, error: error instanceof Error ? error.message : String(error) });
 			return;
@@ -287,6 +287,27 @@ function vscodeCandidates(platform = process.platform) {
 	return ["code", "/usr/bin/code", "/usr/local/bin/code", "/snap/bin/code"];
 }
 
+/**
+ * macOS only: `code` opens the workspace but a background launch does not activate the app,
+ * so the window stays behind the Harness. `open -b` brings the running app to the front.
+ */
+function activationArgs(platform = process.platform) {
+	return platform === "darwin" ? ["-b", "com.microsoft.VSCode"] : undefined;
+}
+
+/**
+ * Environment for the VS Code CLI. The Harness runs inside Electron and passes
+ * `ELECTRON_RUN_AS_NODE=1` down; a VS Code instance spawned with it would start as a plain
+ * Node process instead of the GUI. The `code` shell script sets the flag itself for its CLI
+ * child, so removing the inherited copy is safe and lets a cold launch open a window.
+ */
+function vscodeEnv(source = process.env) {
+	const env = { ...source };
+	delete env.ELECTRON_RUN_AS_NODE;
+	delete env.ELECTRON_NO_ATTACH_CONSOLE;
+	return env;
+}
+
 /** `code <root> <file>` when the file is inside the rule's root, `code <file>` otherwise. */
 function vscodeArgs(rule, file) {
 	const args = [];
@@ -299,9 +320,15 @@ function vscodeArgs(rule, file) {
 /** Open one resolved vault file in VS Code, trying the known `code` locations before giving up. */
 async function launchVscode(rule, file) {
 	const args = vscodeArgs(rule, file);
+	const env = vscodeEnv();
 	for (const command of vscodeCandidates()) {
-		const result = await runDetached(command, args);
-		if (result.ok || result.missing !== true) return result;
+		const result = await runDetached(command, args, env);
+		if (result.ok) {
+			const activation = activationArgs();
+			if (activation !== undefined) await runDetached("/usr/bin/open", activation, env);
+			return result;
+		}
+		if (result.missing !== true) return result;
 	}
 	return {
 		ok: false,
@@ -508,4 +535,4 @@ export default {
 
 // Internal helpers, re-exported so the test suite can exercise them without a running Harness.
 // They are not part of the plugin's stable public surface.
-export { normalizeConfig, buildConfig, readConfigFile, resolveVaultFile, obsidianUri, openerFor, pickOpener, vscodeArgs, vscodeCandidates };
+export { normalizeConfig, buildConfig, readConfigFile, resolveVaultFile, obsidianUri, openerFor, pickOpener, vscodeArgs, vscodeCandidates, activationArgs, vscodeEnv };

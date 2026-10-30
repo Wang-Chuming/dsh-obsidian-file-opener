@@ -14,7 +14,9 @@ import {
 	openerFor,
 	pickOpener,
 	vscodeArgs,
-	vscodeCandidates
+	vscodeCandidates,
+	activationArgs,
+	vscodeEnv
 } from "../index.js";
 
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -268,4 +270,20 @@ test("vscodeCandidates looks inside the macOS app bundle and falls back to PATH"
 	assert.equal(vscodeCandidates("darwin").includes("code"), true);
 	assert.deepEqual(vscodeCandidates("win32").slice(0, 2), ["code.cmd", "code"]);
 	assert.equal(vscodeCandidates("linux")[0], "code");
+});
+
+test("activationArgs brings VS Code to the front on macOS only", () => {
+	assert.deepEqual(activationArgs("darwin"), ["-b", "com.microsoft.VSCode"]);
+	assert.equal(activationArgs("linux"), undefined);
+	assert.equal(activationArgs("win32"), undefined);
+});
+
+test("vscodeEnv drops the inherited Electron run-as-node flags without mutating the source", () => {
+	const source = { ELECTRON_RUN_AS_NODE: "1", ELECTRON_NO_ATTACH_CONSOLE: "1", PATH: "/usr/bin", HOME: "/home/you" };
+	const env = vscodeEnv(source);
+	assert.equal(env.ELECTRON_RUN_AS_NODE, undefined);
+	assert.equal(env.ELECTRON_NO_ATTACH_CONSOLE, undefined);
+	assert.equal(env.PATH, "/usr/bin");
+	assert.equal(env.HOME, "/home/you");
+	assert.equal(source.ELECTRON_RUN_AS_NODE, "1");
 });
